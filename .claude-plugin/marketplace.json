@@ -1,0 +1,17 @@
+{
+  "name": "cloudaeye",
+  "owner": {
+    "name": "CloudAEye",
+    "email": "support@cloudaeye.com",
+    "url": "https://cloudaeye.com"
+  },
+  "plugins": [
+    {
+      "name": "cloudaeye",
+      "source": "./",
+      "description": "Pre-commit code review, security scan, and task verification.",
+      "category": "development",
+      "tags": ["code-review", "security", "pre-commit"]
+    }
+  ]
+}
