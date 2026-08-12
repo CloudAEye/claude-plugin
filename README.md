@@ -110,9 +110,12 @@ Worth knowing before you point this at a private repo:
   the review there. Untracked files are included — they are marked with
   `git add --intent-to-add` so they appear in the diff.
 - The scratch directory `.cloudaeye/` is created in your repo and gitignores itself on
-  every run.
+  every run. It holds session files only — the request body, the server's response, and
+  the diff.
 - The API key travels in an `X-Product-API-Key` header, and reaches `curl` through a
-  config file rather than the command line, so it stays out of the process table.
+  config file rather than the command line, so it stays out of the process table. That
+  file is written to a private temp directory outside your repo and deleted when the
+  run ends — no credential is ever written into your working tree.
 - The `git add --intent-to-add` is non-destructive: it records paths in the index
   without staging content. Undo with `git reset`.
 

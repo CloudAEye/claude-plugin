@@ -1,0 +1,14 @@
+{
+  "name": "@cloudaeye/cli",
+  "version": "0.1.0",
+  "description": "Sign in to CloudAEye and put a Code Review API key on this machine, for the Claude Code plugin.",
+  "type": "module",
+  "bin": { "cloudaeye": "bin/cloudaeye.js" },
+  "engines": { "node": ">=18" },
+  "files": ["bin", "src"],
+  "keywords": ["cloudaeye", "code-review", "claude-code"],
+  "homepage": "https://github.com/CloudAEye/claude-code/tree/main/cli",
+  "repository": { "type": "git", "url": "git+https://github.com/CloudAEye/claude-code.git", "directory": "cli" },
+  "author": "CloudAEye",
+  "private": false
+}
