@@ -1,0 +1,6 @@
+# Every skill embeds a bash block that Claude Code lifts out of SKILL.md and runs
+# verbatim. A CRLF checkout puts a carriage return at the end of every line of that
+# block, and bash answers with `$'\r': command not found` before anything runs. Git
+# for Windows sets core.autocrlf=true by default, so without this file the plugin
+# breaks on exactly the machines least likely to diagnose it.
+* text=auto eol=lf
