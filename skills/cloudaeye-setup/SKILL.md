@@ -96,13 +96,30 @@ removed from.
 
    | condition | next step to print |
    |---|---|
-   | `api_key=missing` | 1. Create an account at https://console.cloudaeye.com/signup — 2. run `npx @cloudaeye/cli login` in **their own terminal**, not here — 3. come back and run `/cloudaeye-review` |
-   | `api_key=malformed` | The stored key is not a plausible key string. Re-run `npx @cloudaeye/cli login` to replace it. |
-   | `tenant_key=missing` but key present | The key cannot be checked without a tenant. Re-run `npx @cloudaeye/cli login`; if it persists, the account has no tenant yet and onboarding is unfinished on the console. |
+   | `api_key=missing` | 1. Create an account at https://console.cloudaeye.com/signup — 2. get a `Code Review` product API key onto this machine, by either route below — 3. come back and run `/cloudaeye-review` |
+   | `api_key=malformed` | The stored key is not a plausible key string. Replace it by either route below. |
+   | `tenant_key=missing` but key present | The key cannot be checked without a tenant — `tenant_key` is required, not optional. Add it alongside the key. If the user does not know theirs, it is on the console; an account with no tenant at all means onboarding was never finished. |
    | `server_probe=000` and the URL is localhost | The review server is not running on this machine. Either start it, or point at a hosted one by exporting `CLOUDAEYE_URL`. |
    | `server_probe=000` and the URL is remote | The server is unreachable — VPN, firewall, or a wrong `CLOUDAEYE_URL`. |
    | MCP tools absent | The plugin's MCP server did not connect. `CLOUDAEYE_URL` must be set **before** Claude Code starts, because `.mcp.json` reads it at connect time; after exporting it, restart Claude Code. |
    | everything ✓ | Run `/cloudaeye-inspect` on a change and stop. Nothing else needs doing. |
+
+   **The two routes for getting a key onto the machine.** Give the CLI first, and the
+   manual route as the fallback — but check the CLI actually exists before naming it as
+   the only option. `cli_installed=no` says only that it is not on `PATH`; if
+   `npx @cloudaeye/cli` 404s, the package is not published yet and the manual route is
+   the *only* one. Never run either of these yourself.
+
+   ```text
+   npx @cloudaeye/cli login          # in the user's own terminal — prompts for a password
+   ```
+
+   Manual, and the right answer for CI in any case — the user writes this, not you:
+
+   ```text
+   export CLOUDAEYE_API_KEY=…        # or ~/.cloudaeye/config.json, mode 0600, with
+   export CLOUDAEYE_TENANT_KEY=…     # keys api_key / tenant_key / user_name / url
+   ```
 
 4. Report these only if they are true — each one is a real problem, not a nag:
 
