@@ -4,28 +4,26 @@ Pre-commit code review, security scanning, and task verification, as a Claude Co
 plugin. CloudAEye reviews the change you have **not committed yet** — the diff against
 your branch's fork point — so problems surface before they reach a PR.
 
-> **Pre-release.** The plugin works today against a review server you can reach. The
-> `@cloudaeye/cli` sign-in helper referenced below is not published yet; until it is,
-> use the [manual credential setup](#option-b-set-the-credential-yourself).
+> **Pre-release.** The plugin works today against a review server you can reach. Set
+> the credential yourself: see [Connect your account](#connect-your-account).
 
 ## What you get
 
 | Command | What it does |
 |---|---|
-| `/cloudaeye-inspect` | Bug pass — logic errors, edge cases, error handling, concurrency, dead imports. No security prompts, so it is cheap enough to run after every task. |
-| `/cloudaeye-security` | Security pass — OWASP-style application security plus the LLM, AI-agent and MCP surfaces, and secrets on the changed lines. |
-| `/cloudaeye-review` | Both of the above in one call. Use before opening a significant PR. |
-| `/cloudaeye-describe` | A Change Description and Important Changes list, ready for a PR body or commit message. |
-| `/cloudaeye-ask` | A question about the pending change, answered against the repository's code graph — callers, definitions, usage traces. |
-| `/cloudaeye-check-task` | Does this diff actually do what the ticket asked? DONE / NOT DONE with a per-requirement checklist. Takes a GitHub issue URL, ticket IDs, or plain text. |
-| `/cloudaeye-setup` | Diagnoses the install and prints the one next step. Never handles credentials. |
+| `/cloudaeye:inspect` | Bug pass — logic errors, edge cases, error handling, concurrency, dead imports. No security prompts, so it is cheap enough to run after every task. |
+| `/cloudaeye:security` | Security pass — OWASP-style application security plus the LLM, AI-agent and MCP surfaces, and secrets on the changed lines. |
+| `/cloudaeye:review` | Both of the above in one call. Use before opening a significant PR. |
+| `/cloudaeye:describe` | A Change Description and Important Changes list, ready for a PR body or commit message. |
+| `/cloudaeye:ask` | A question about the pending change, answered against the repository's code graph — callers, definitions, usage traces. |
+| `/cloudaeye:check-task` | Does this diff actually do what the ticket asked? DONE / NOT DONE with a per-requirement checklist. Takes a GitHub issue URL, ticket IDs, or plain text. |
 
 None of them edit your code. They report; you decide.
 
 ## Install
 
 ```bash
-/plugin marketplace add CloudAEye/claude-code
+/plugin marketplace add CloudAEye/claude-plugin
 ```
 
 ```bash
@@ -54,26 +52,8 @@ remote host rather than put your API key on the wire in clear.
 ## Connect your account
 
 Reviews need one credential: a CloudAEye **product API key** carrying the `Code Review`
-product, plus the tenant key it belongs to.
-
-### Option A — the CLI (once published)
-
-1. Create an account at <https://console.cloudaeye.com/signup>.
-2. In **your own terminal** — not through Claude:
-
-   ```bash
-   npx @cloudaeye/cli login
-   ```
-
-   It prompts for your email and password, mints an API key for this machine, and
-   writes `~/.cloudaeye/config.json`. The password is used once and discarded; nothing
-   is copy-pasted.
-3. Back in Claude Code, run `/cloudaeye-review`.
-
-The CLI refuses to run without a TTY. That is deliberate: it means an agent cannot run
-it, so your password never lands in a transcript.
-
-### Option B — set the credential yourself
+product, plus the tenant key it belongs to. Create an account at
+<https://console.cloudaeye.com/signup> to get one.
 
 Either export it:
 
@@ -110,9 +90,12 @@ Worth knowing before you point this at a private repo:
   the review there. Untracked files are included — they are marked with
   `git add --intent-to-add` so they appear in the diff.
 - The scratch directory `.cloudaeye/` is created in your repo and gitignores itself on
-  every run.
+  every run. It holds session files only — the request body, the server's response, and
+  the diff.
 - The API key travels in an `X-Product-API-Key` header, and reaches `curl` through a
-  config file rather than the command line, so it stays out of the process table.
+  config file rather than the command line, so it stays out of the process table. That
+  file is written to a private temp directory outside your repo and deleted when the
+  run ends — no credential is ever written into your working tree.
 - The `git add --intent-to-add` is non-destructive: it records paths in the index
   without staging content. Undo with `git reset`.
 
@@ -126,17 +109,15 @@ work before reporting done:
 
 After completing any coding task, before reporting done:
 
-1. Run `/cloudaeye-inspect` (bug pass — no security prompts)
+1. Run `/cloudaeye:inspect` (bug pass — no security prompts)
 2. Surface the findings to the user. Don't auto-fix unless asked.
 
 If the change touches auth, untrusted input, deserialization, secrets, crypto, LLM
-prompts, tool definitions, or agent orchestration — suggest `/cloudaeye-security`
+prompts, tool definitions, or agent orchestration — suggest `/cloudaeye:security`
 after reporting the inspect findings. Don't run it uninvited.
 ```
 
 ## Troubleshooting
-
-Run `/cloudaeye-setup` first — it checks all of this and prints the one thing to fix.
 
 | Symptom | Cause and fix |
 |---|---|
@@ -146,7 +127,7 @@ Run `/cloudaeye-setup` first — it checks all of this and prints the one thing 
 | `cloudaeye_error=auth_failed` | The server refused the key. The response body says which: unknown or expired key, a tenant the key does not belong to, or a key without the `Code Review` product. Retrying changes nothing. |
 | `cloudaeye_error=insecure_url` | A remote server over plain `http`. Use `https`. |
 | `cloudaeye_error=session_failed http=000` | Nothing answered at `CLOUDAEYE_URL` — server down, wrong URL, or VPN. |
-| The `/cloudaeye-*` commands exist but the review never calls a tool | The MCP server did not connect. `CLOUDAEYE_URL` has to be set before Claude Code starts; export it and restart. |
+| The `/cloudaeye:*` commands exist but the review never calls a tool | The MCP server did not connect. `CLOUDAEYE_URL` has to be set before Claude Code starts; export it and restart. |
 | `base_source=head` in the output | The repo is not integrated with CloudAEye under your tenant, so there is no baseline branch. The review still runs, but only over working-tree edits. |
 
 ## Layout
@@ -157,7 +138,7 @@ Run `/cloudaeye-setup` first — it checks all of this and prints the one thing 
   plugin.json
 .mcp.json               server URL only — no auth headers
 skills/
-  cloudaeye-<verb>/SKILL.md
+  <verb>/SKILL.md        invoked as /cloudaeye:<verb>
 ```
 
 The MCP tools take a `session_id`, not an API key — only `POST /session` and
