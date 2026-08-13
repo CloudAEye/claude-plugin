@@ -36,34 +36,72 @@ startup.
 If you previously hand-installed these skills into `~/.claude/skills/cloudaeye-*`,
 **delete that directory**. Two copies both work, and they drift apart silently.
 
-## Point it at your review server
-
-The plugin's MCP server reads `CLOUDAEYE_URL` at connect time and defaults to
-`http://localhost:8000`. Export it in your shell profile, so it is set **before**
-Claude Code starts:
-
-```bash
-export CLOUDAEYE_URL=https://your-cloudaeye-review-server
-```
-
-Anything that is not localhost must be `https`. The skills refuse plain `http` to a
-remote host rather than put your API key on the wire in clear.
-
 ## Connect your account
 
 Reviews need one credential: a CloudAEye **product API key** carrying the `Code Review`
 product, plus the tenant key it belongs to. Create an account at
-<https://console.cloudaeye.com/signup> to get one.
+<https://console.cloudaeye.com/signup> to get one, then generate a key on the console.
 
-Either export it:
+### Add it to `~/.claude.json`
+
+Installing the plugin does **not** create an entry there — look and you will find no
+`cloudaeye` key at all. The plugin's own MCP config lives in the plugin cache:
+
+```text
+~/.claude/plugins/cache/cloudaeye/cloudaeye/<version>/.mcp.json
+```
+
+Do not edit that file. It is rewritten on every plugin update, and your key would
+vanish with the next release.
+
+Create the entry in `~/.claude.json` instead. One entry carries both your server and
+your credentials:
+
+```json
+{
+  "mcpServers": {
+    "cloudaeye": {
+      "type": "http",
+      "url": "https://your-cloudaeye-review-server/mcp",
+      "headers": {
+        "X-Product-API-Key": "your-product-api-key",
+        "X-Tenant-Key": "92",
+        "X-User-Name": "your-name"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Code afterwards. The skills read the three headers as credentials and
+derive the HTTP base URL by dropping the `/mcp` suffix, so the server address is
+configured once rather than twice.
+
+`X-Product-API-Key` and `X-Tenant-Key` are a **pair** and both are required. The tenant
+selects your organisation's database — the one holding the repo integration record, the
+code-context graph and the Jira installation — and the key must be a key *in that
+database*, carrying *that* tenant, granting the `Code Review` product. Miss either and
+the server answers `401`/`403`. `X-User-Name` is optional; it scopes the review session
+so two developers on one repo don't share one.
+
+Those headers do **not** authenticate the MCP tool calls, and are not sent with them.
+Only `POST /session` and `POST /upload` are authenticated, from the shell block inside
+each skill. The entry is a credential store the skills read, which is why the plugin
+itself ships no secrets.
+
+### If you'd rather not touch `~/.claude.json`
+
+The same four values resolve, per field, from the environment — this is what CI should
+use:
 
 ```bash
 export CLOUDAEYE_API_KEY=your-product-api-key
 export CLOUDAEYE_TENANT_KEY=92
 export CLOUDAEYE_USER_NAME=your-name
+export CLOUDAEYE_URL=https://your-cloudaeye-review-server
 ```
 
-…or write `~/.cloudaeye/config.json` (mode `0600`):
+…or from `~/.cloudaeye/config.json` (mode `0600`), one file per machine:
 
 ```json
 {
@@ -74,9 +112,19 @@ export CLOUDAEYE_USER_NAME=your-name
 }
 ```
 
-Environment wins, then the `cloudaeye` entry in `~/.claude.json`, then
-`~/.cloudaeye/config.json`. Every run prints `auth_from=` naming the layer that
-answered. Use the environment layer in CI.
+Environment wins, then `~/.claude.json`, then `~/.cloudaeye/config.json`. Every run
+prints `auth_from=` naming the layer that answered, on success **and** on failure — so
+a broken review never leaves you guessing whether the credential was the problem.
+
+One thing the file layers cannot do: `.mcp.json` in the plugin reads
+`CLOUDAEYE_URL` from the environment at connect time and cannot read any file. If your
+server is not `http://localhost:8000` and you configure it through
+`~/.cloudaeye/config.json` alone, the skills will reach the right server but the MCP
+tools will not connect. Either use the `~/.claude.json` entry above, or export
+`CLOUDAEYE_URL` before starting Claude Code.
+
+Anything that is not localhost must be `https`. The skills refuse plain `http` to a
+remote host rather than put your API key on the wire in clear.
 
 Nothing goes in your project. There is no per-repo config file to add, and no
 credential in your working tree.
