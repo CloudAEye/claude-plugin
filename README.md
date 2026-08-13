@@ -40,94 +40,75 @@ If you previously hand-installed these skills into `~/.claude/skills/cloudaeye-*
 
 Reviews need one credential: a CloudAEye **product API key** carrying the `Code Review`
 product, plus the tenant key it belongs to. Create an account at
-<https://console.cloudaeye.com/signup> to get one, then generate a key on the console.
+<https://console.cloudaeye.com/signup>, then generate a key on the console.
 
-### Add it to `~/.claude.json`
+Set three environment variables. **Windows** — `setx`, then restart Claude Code:
 
-Installing the plugin does **not** create an entry there — look and you will find no
-`cloudaeye` key at all. The plugin's own MCP config lives in the plugin cache:
-
-```text
-~/.claude/plugins/cache/cloudaeye/cloudaeye/<version>/.mcp.json
+```bash
+setx CLOUDAEYE_API_KEY your-product-api-key
+```
+```bash
+setx CLOUDAEYE_TENANT_KEY 92
+```
+```bash
+setx CLOUDAEYE_USER_NAME your-name
 ```
 
-Do not edit that file. It is rewritten on every plugin update, and your key would
-vanish with the next release.
-
-Create the entry in `~/.claude.json` instead. One entry carries both your server and
-your credentials:
-
-```json
-{
-  "mcpServers": {
-    "cloudaeye": {
-      "type": "http",
-      "url": "https://your-cloudaeye-review-server/mcp",
-      "headers": {
-        "X-Product-API-Key": "your-product-api-key",
-        "X-Tenant-Key": "92",
-        "X-User-Name": "your-name"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Code afterwards. The skills read the three headers as credentials and
-derive the HTTP base URL by dropping the `/mcp` suffix, so the server address is
-configured once rather than twice.
-
-`X-Product-API-Key` and `X-Tenant-Key` are a **pair** and both are required. The tenant
-selects your organisation's database — the one holding the repo integration record, the
-code-context graph and the Jira installation — and the key must be a key *in that
-database*, carrying *that* tenant, granting the `Code Review` product. Miss either and
-the server answers `401`/`403`. `X-User-Name` is optional; it scopes the review session
-so two developers on one repo don't share one.
-
-Those headers do **not** authenticate the MCP tool calls, and are not sent with them.
-Only `POST /session` and `POST /upload` are authenticated, from the shell block inside
-each skill. The entry is a credential store the skills read, which is why the plugin
-itself ships no secrets.
-
-### If you'd rather not touch `~/.claude.json`
-
-The same four values resolve, per field, from the environment — this is what CI should
-use:
+**macOS / Linux** — in your shell profile, so they survive a reboot:
 
 ```bash
 export CLOUDAEYE_API_KEY=your-product-api-key
 export CLOUDAEYE_TENANT_KEY=92
 export CLOUDAEYE_USER_NAME=your-name
-export CLOUDAEYE_URL=https://your-cloudaeye-review-server
 ```
 
-…or from `~/.cloudaeye/config.json` (mode `0600`), one file per machine:
+That is the whole setup. The review server address is preconfigured in the plugin, so
+there is nothing else to set.
 
-```json
-{
-  "api_key": "your-product-api-key",
-  "tenant_key": "92",
-  "user_name": "your-name",
-  "url": "https://your-cloudaeye-review-server"
-}
+> **Windows, the one that catches everyone:** an `export` in Git Bash is invisible to a
+> Claude Code launched from the Start menu. Use `setx` (or System Properties →
+> Environment Variables) and restart the app, or the plugin will look configured and
+> behave as though it is not.
+
+`CLOUDAEYE_API_KEY` and `CLOUDAEYE_TENANT_KEY` are a **pair** and both are required. The
+tenant selects your organisation's database — the one holding the repo integration
+record, the code-context graph and the Jira installation — and the key must be a key *in
+that database*, carrying *that* tenant, granting the `Code Review` product. Miss either
+and the server answers `401`/`403` and nothing runs. `CLOUDAEYE_USER_NAME` is optional;
+it scopes the review session so two developers on one repo don't share one.
+
+These are read by the shell block inside each skill, which sends the key as an
+`X-Product-API-Key` header on `POST /session` and `POST /upload`. They are **not** sent
+with MCP tool calls — those take a `session_id`, which is why this plugin ships no
+secrets and needs no configuration to install.
+
+Nothing goes in your project. There is no per-repo config file, and no credential in
+your working tree.
+
+### Self-hosted or on-prem
+
+Point the plugin at your own server with a fourth variable, set the same way:
+
+```bash
+setx CLOUDAEYE_URL https://your-cloudaeye-review-server
 ```
 
-Environment wins, then `~/.claude.json`, then `~/.cloudaeye/config.json`. Every run
-prints `auth_from=` naming the layer that answered, on success **and** on failure — so
-a broken review never leaves you guessing whether the credential was the problem.
+This one **must** be set before Claude Code starts — the plugin's MCP configuration
+reads it at connect time and cannot read it from anywhere else. Anything that is not
+localhost must be `https`; the skills refuse plain `http` to a remote host rather than
+put your key on the wire in clear.
 
-One thing the file layers cannot do: `.mcp.json` in the plugin reads
-`CLOUDAEYE_URL` from the environment at connect time and cannot read any file. If your
-server is not `http://localhost:8000` and you configure it through
-`~/.cloudaeye/config.json` alone, the skills will reach the right server but the MCP
-tools will not connect. Either use the `~/.claude.json` entry above, or export
-`CLOUDAEYE_URL` before starting Claude Code.
+### If you can't set environment variables
 
-Anything that is not localhost must be `https`. The skills refuse plain `http` to a
-remote host rather than put your API key on the wire in clear.
+On a machine where you can't set them — a locked-down laptop, or a shared box where
+every process can read the environment — the same four values also resolve from
+`~/.cloudaeye/config.json` (mode `0600`) with `api_key` / `tenant_key` / `user_name` /
+`url` keys, or from `headers` on a `cloudaeye` entry you add to `~/.claude.json`
+yourself. Environment wins, then `~/.claude.json`, then `~/.cloudaeye/config.json`.
 
-Nothing goes in your project. There is no per-repo config file to add, and no
-credential in your working tree.
+Every run prints `auth_from=` naming the layer that answered, on success **and** on
+failure, so a broken review never leaves you guessing whether the credential was the
+problem.
 
 ## What actually leaves your machine
 
@@ -171,11 +152,11 @@ after reporting the inspect findings. Don't run it uninvited.
 |---|---|
 | `/plugin marketplace add` fails on a corporate laptop | The `owner/repo` shorthand clones over SSH. Set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` and retry. |
 | `/plugin install cloudaeye` reports the plugin is not found | The marketplace step above hasn't run, or the catalog is stale — `/plugin marketplace update cloudaeye`, then retry. To be explicit about which catalog it comes from, use the fully qualified `/plugin install cloudaeye@cloudaeye`. |
-| `cloudaeye_error=not_configured` | No API key on this machine. See [Connect your account](#connect-your-account). |
+| `cloudaeye_error=not_configured` | No API key on this machine. Set the three environment variables in [Connect your account](#connect-your-account) — and on Windows, restart Claude Code after `setx`. |
 | `cloudaeye_error=auth_failed` | The server refused the key. The response body says which: unknown or expired key, a tenant the key does not belong to, or a key without the `Code Review` product. Retrying changes nothing. |
 | `cloudaeye_error=insecure_url` | A remote server over plain `http`. Use `https`. |
-| `cloudaeye_error=session_failed http=000` | Nothing answered at `CLOUDAEYE_URL` — server down, wrong URL, or VPN. |
-| The `/cloudaeye:*` commands exist but the review never calls a tool | The MCP server did not connect. `CLOUDAEYE_URL` has to be set before Claude Code starts; export it and restart. |
+| `cloudaeye_error=session_failed http=000` | Nothing answered at the review server — VPN, firewall, or a wrong `CLOUDAEYE_URL` if you set one. The line also prints `auth_from=`, so it tells you whether your credential resolved. |
+| The `/cloudaeye:*` commands exist but the review never calls a tool | The MCP server did not connect. Restart Claude Code. If you are self-hosted, `CLOUDAEYE_URL` has to be set **before** it starts. |
 | `base_source=head` in the output | The repo is not integrated with CloudAEye under your tenant, so there is no baseline branch. The review still runs, but only over working-tree edits. |
 
 ## Layout
