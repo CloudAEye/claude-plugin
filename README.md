@@ -23,7 +23,7 @@ None of them edit your code. They report; you decide.
 ## Install
 
 ```bash
-/plugin marketplace add CloudAEye/claude-code
+/plugin marketplace add CloudAEye/claude-plugin
 ```
 
 ```bash
