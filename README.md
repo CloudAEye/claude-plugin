@@ -85,19 +85,6 @@ secrets and needs no configuration to install.
 Nothing goes in your project. There is no per-repo config file, and no credential in
 your working tree.
 
-### Self-hosted or on-prem
-
-Point the plugin at your own server with a fourth variable, set the same way:
-
-```bash
-setx CLOUDAEYE_URL https://your-cloudaeye-review-server
-```
-
-This one **must** be set before Claude Code starts — the plugin's MCP configuration
-reads it at connect time and cannot read it from anywhere else. Anything that is not
-localhost must be `https`; the skills refuse plain `http` to a remote host rather than
-put your key on the wire in clear.
-
 ### If you can't set environment variables
 
 On a machine where you can't set them — a locked-down laptop, or a shared box where
