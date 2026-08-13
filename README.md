@@ -48,7 +48,7 @@ Set three environment variables. **Windows** — `setx`, then restart Claude Cod
 setx CLOUDAEYE_API_KEY your-product-api-key
 ```
 ```bash
-setx CLOUDAEYE_TENANT_KEY 92
+setx CLOUDAEYE_TENANT_KEY 123
 ```
 ```bash
 setx CLOUDAEYE_USER_NAME your-name
@@ -58,7 +58,7 @@ setx CLOUDAEYE_USER_NAME your-name
 
 ```bash
 export CLOUDAEYE_API_KEY=your-product-api-key
-export CLOUDAEYE_TENANT_KEY=92
+export CLOUDAEYE_TENANT_KEY=123
 export CLOUDAEYE_USER_NAME=your-name
 ```
 
