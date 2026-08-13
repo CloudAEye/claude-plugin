@@ -1,15 +1,21 @@
 ---
-name: cloudaeye-review
-description: Full CloudAEye review of the uncommitted changes in this repo — bugs and security in one pass. Reports findings with file, line and severity, grouped by kind; it never edits code on its own. The widest and most expensive of the CloudAEye passes.
-when_to_use: Use before opening a significant PR, or when the user asks for a full, complete or thorough review. For the routine check after finishing a task use /cloudaeye-inspect; for the security surface alone use /cloudaeye-security.
-allowed-tools: mcp__cloudaeye__inspect_diff
+name: ask
+description: Ask a free-form question about the uncommitted changes in this repo and get an answer grounded in the repository's code graph — callers, definitions and usage traces, not just the diff text. Returns an answer, not a review, and never edits code.
+when_to_use: Use for blast-radius questions ("what else calls this?"), "what did this do before?", "is this pattern used elsewhere?", or a second opinion the coding agent cannot give from its own context window.
+argument-hint: "[question about the pending change]"
+allowed-tools: mcp__cloudaeye__ask
 ---
 
 ## When to run
 
-The user invoked `/cloudaeye-review`, or asked for a full/complete/thorough review. This is the widest pass: everything `/cloudaeye-inspect` checks **plus** everything `/cloudaeye-security` checks, in a single call.
+The user invoked `/cloudaeye:ask`, or asked a question about the pending change that you cannot answer confidently from what you have already read. That second case is the important one: the server has the whole repository's AST graph indexed, and you have a context window. Questions worth handing over:
 
-It costs more than either alone — every enabled category rides in the per-file scan prompt. For the routine after-a-coding-task check, `/cloudaeye-inspect` is the right skill. Reach for this one before a significant PR, on a change large enough to warrant the extra passes, or when the user asks for it by name.
+- **Blast radius** — "what else calls this?", "who depends on this interface?"
+- **Prior behaviour** — "what did this function do before my change?"
+- **Repo-wide patterns** — "is this error handled the same way elsewhere?", "do other callers already do this check?"
+- **Second opinion on a specific line** — "is this lock actually protecting anything?"
+
+Do **not** use it as a review. It returns no findings and no verdict. If the user wants problems found, that's `/cloudaeye:inspect` (bugs), `/cloudaeye:security` (security), or `/cloudaeye:review` (both).
 
 ## Steps
 
@@ -38,8 +44,8 @@ It costs more than either alone — every enabled category rides in the per-file
    # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
    # X-User-Name, plus `url` minus its /mcp suffix) — the entry `claude mcp add`
    # writes, which a hand-registered server has and a plugin install does not;
-   # then ~/.cloudaeye/config.json, which `npx @cloudaeye/cli login` writes and
-   # which is the layer a plugin install normally resolves from.
+   # then ~/.cloudaeye/config.json, which is the layer a plugin install
+   # normally resolves from.
    # Read projects[cwd] before the root mcpServers,
    # matching how Claude Code resolves local scope over user scope. NOT
    # ~/.claude/mcp.json: that file is inert, Claude Code never reads it, and a key
@@ -61,7 +67,7 @@ It costs more than either alone — every enabled category rides in the per-file
    case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
    # No key resolved from any layer. Fail here in milliseconds rather than after a
    # round-trip, and name it as "never set up" rather than "key rejected" — the fix
-   # is /cloudaeye-setup, not a retry. Localhost is exempt: a dev server started
+   # is a credential, not a retry. Localhost is exempt: a dev server started
    # with CLOUDAEYE_AUTH_DISABLED takes unauthenticated sessions.
    case "$ORIGIN:$CE" in
      none:http://localhost*|none:http://127.0.0.1*|none:https://localhost*|none:https://127.0.0.1*) ;;
@@ -105,16 +111,16 @@ It costs more than either alone — every enabled category rides in the per-file
    cat .cloudaeye/session/session.json; echo
    ```
 
-   Set `LANG_HINT` to the repo's primary language. The block resets the scratch workspace, mints or resumes the review session on the server, resolves the baseline, captures the diff and uploads it. If the `mcp__cloudaeye__inspect_diff` schema is not loaded yet, load it **in the same message** as this command so the two overlap instead of queueing.
+   Set `LANG_HINT` to the repo's primary language. The block resets the scratch workspace, mints or resumes the review session on the server, resolves the baseline, captures the diff and uploads it. If the `mcp__cloudaeye__ask` schema is not loaded yet, load it **in the same message** as this command so the two overlap instead of queueing.
 
    It prints two summary lines and then the raw session JSON. Read them — don't re-derive any of it:
 
    | output | what to do with it |
    |---|---|
-   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user to run `/cloudaeye-setup`. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
-   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user to run `/cloudaeye-setup`, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
+   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user the key on this machine has to change. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
+   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user CloudAEye is not set up on this machine, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
    | `session_id=…` | Pass it to the MCP tool. |
-   | `diff_bytes=0` | Nothing pending — report "nothing to review" and stop. |
+   | `diff_bytes=0` | No pending changes. **Do not stop** — unlike the review skills, a question about the existing code is still answerable. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age` — a year-old `base_age` means anything merged since is invisible here. |
    | `base_source=head` | Degraded: only working-tree edits are in the diff. Say so, and pass on `target_branch_error` from the JSON if it is set. |
    | `upload_http=` not `200` | The diff never reached the server. Stop — the call would run against absent or stale content and still look clean. |
@@ -122,36 +128,24 @@ It costs more than either alone — every enabled category rides in the per-file
    | a `target_branch_error` about `tenant_key` | The tenant authenticated but the repo isn't integrated under it: no baseline branch, no code-context graph. It still runs, against local `HEAD`. Say it once. |
 
    **Which baseline applied must reach the user.** Every degradation still produces output that looks correct, so silence about it is the one failure mode that misleads. Keeping the clone current is the developer's job — the skill never forces a fetch, it just refuses to hide what it used.
-2. Write a one-paragraph intent summary describing **the code change you just made in this round of edits** — what you implemented and why, plus any security-relevant surface it touches (untrusted input, auth, secrets, serialization, prompts, tool definitions). Not a re-statement of the original ask. The planner uses this verbatim to prioritise within the full category set, and it is the **only** channel for telling the reviewer to leave a previously-flagged issue alone — so if you are asking it to skip something, say which finding and why, in words the user can see.
-3. Call the `mcp__cloudaeye__inspect_diff` MCP tool with:
+2. Call the `mcp__cloudaeye__ask` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
-   - `intent`: the summary from step 2
-   - `profile`: `"review"` — **always this value from this skill.** It selects every valid prompt: the bug categories and the full security surface.
-   - `context`: optional — only set for `pr_title` / `pr_description`. Do not pass `review_config` or `report_types`; either one overrides the profile and narrows the review you were asked to run.
+   - `question`: the user's question **verbatim**. Do not summarise it, do not expand it into a "better" question, do not split it into several. The phrasing is what they meant; a rewritten question gets a different answer to a question nobody asked. If the question was implicit in conversation ("wait, does that break the retry path?"), quote it as they said it.
+   - `intent`: optional — one paragraph on what you just changed, if the question is about your edit. Context for the question, not its subject.
+   - `context`: optional — only `pr_title` / `pr_description`.
 
-   You do **not** need to read the changed source files yourself before calling — the server has the post-edit contents staged and examines them with its own tooling.
-4. Report the response to the user:
-   - **First: `verdict` is `error`, or the response carries a `degraded` block.** The review ran with no post-edit source staged, so every prompt saw an empty file and the secret scan never picked a detector (`secret_scan.detector: "none"` is the tell). **Report it as a failed run and stop — do not present the findings, and never call it clean.** `degraded.cause` names the upstream reason when there is one; `context_refresh.status` of `skipped`/`failed` carries it verbatim, and an expired GitHub installation token is the usual culprit. The server does not cache a degraded run, so re-running once the cause is fixed gives a real review.
-   - The `verdict` (`approve` / `request_changes`).
-   - **Report what came back, not what didn't.** Don't list report types that produced no findings, don't quote timings, file counts or detector names that worked, and don't explain which prompts didn't fire. The response deliberately omits that metadata; narrating its absence turns a three-line result into a wall of caveats. A diagnostic field the response *does* carry is there precisely because it changes what the result means — those you report.
-   - Every finding, **grouped by `report_type`** — leaked secrets first (a committed credential has a clock on it), then bugs, then application security, then LLM / AI-agent / MCP security. Within each group give file, line, severity, and message. The grouping is what makes a long list readable; don't flatten it.
-   - The `counts` roll-up, so the user sees the shape before the detail.
-   - If there are findings, ask which (if any) to fix — list them by number or tag. Do not start editing until the user replies. After fixing, re-invoke this skill (the server resumes the same review session) and write a fresh intent naming the findings you addressed.
+   You do **not** need to read the changed source files yourself first — the server has the post-edit contents staged and its own tooling to trace through them.
+3. Report the response:
+   - Print the `answer` field as-is. It is plain markdown written to be read directly.
 
-## What this profile runs
-
-Everything the pipeline supports:
-
-- **BUG_REPORT** — logic errors, syntax/compile breaks, edge cases, input validation, concurrency safety, error handling, code clarity, naming consistency, code signatures, performance, dead imports.
-- **SECURITY_REPORT** — injection, auth and access, sensitive-data handling, deserialization, security misconfiguration, XXE.
-- **LLM_SECURITY_REPORT / AIAGENT_SECURITY_REPORT / MCP_REPORT** — the LLM, agent, and MCP security surfaces. Pattern-gated server-side: the planner attaches them only to file groups with matching evidence, so a repo with no LLM/agent/MCP code pays nothing for them.
-- **SECRET_REPORT** — hardcoded credentials on the changed lines, found by gitleaks (or a regex fallback) and validated by the model. Report these **first**; a committed credential is the one finding with a clock on it.
-
-Duplicate-code detection is not part of any profile here — it needs the vector store that the pre-commit server doesn't run.
+   Check `context_refresh.status` first. On `skipped` or `failed` the stored code graph was not refreshed with this diff, so the answer is based on the pre-edit code plus the diff text alone — say so in one line and quote `context_refresh.reason`. It is usually an expired GitHub installation token, which the user has to fix server-side.
+   - If the answer names files you have not read and the user's next step depends on them, offer to open them — don't silently re-derive the answer yourself.
+   - `files_visited` shows what the answer is grounded in. Surface it when the answer is surprising or the user pushes back, so they can see the basis rather than take it on trust.
 
 ## Notes
 
-- **Single-shot** — one call, report the output, done. No fix-and-retry loop inside the skill.
-- Expect more findings, and more low-severity ones, than `/cloudaeye-inspect`. Present them by severity within each report type so the user can triage rather than wade.
-- Pre-commit only: the diff is always `git diff` (working tree vs `HEAD`). Committing moves `HEAD`, but the review session persists — its recorded `head` is refreshed on the next call, and prior intent carries across.
-- If `inspect_diff` is unavailable (MCP not connected), warn the user and skip.
+- **Single-shot** — one question, one answer. If the user has a follow-up, invoke the skill again with the follow-up as the new question; the server resumes the same session.
+- **The answer can be wrong.** It is a model reasoning over a code graph, not a compiler. When it contradicts something you have directly read in the source, say so rather than deferring to it — and prefer the file you read.
+- **It answers; it does not review.** If the answer volunteers problems, that's a bonus, not the contract. Findings come from the review skills.
+- Pre-commit: the diff is `git diff` (working tree vs `HEAD`). Committing moves `HEAD`; the session persists and its recorded `head` is refreshed on the next call.
+- If `ask` is unavailable (MCP not connected), warn the user and answer from your own context instead, saying that's what you did.

@@ -1,5 +1,5 @@
 ---
-name: cloudaeye-describe
+name: describe
 description: Describe the uncommitted changes in this repo — a Change Description heading and an Important Changes bullet list, in plain markdown ready to paste into a PR or a commit message. Trivial diffs short-circuit to one line.
 when_to_use: Use when the user asks what changed, for a PR description, a commit message, or a summary of the pending diff.
 allowed-tools: mcp__cloudaeye__describe_change
@@ -32,8 +32,8 @@ allowed-tools: mcp__cloudaeye__describe_change
    # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
    # X-User-Name, plus `url` minus its /mcp suffix) — the entry `claude mcp add`
    # writes, which a hand-registered server has and a plugin install does not;
-   # then ~/.cloudaeye/config.json, which `npx @cloudaeye/cli login` writes and
-   # which is the layer a plugin install normally resolves from.
+   # then ~/.cloudaeye/config.json, which is the layer a plugin install
+   # normally resolves from.
    # Read projects[cwd] before the root mcpServers,
    # matching how Claude Code resolves local scope over user scope. NOT
    # ~/.claude/mcp.json: that file is inert, Claude Code never reads it, and a key
@@ -55,7 +55,7 @@ allowed-tools: mcp__cloudaeye__describe_change
    case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
    # No key resolved from any layer. Fail here in milliseconds rather than after a
    # round-trip, and name it as "never set up" rather than "key rejected" — the fix
-   # is /cloudaeye-setup, not a retry. Localhost is exempt: a dev server started
+   # is a credential, not a retry. Localhost is exempt: a dev server started
    # with CLOUDAEYE_AUTH_DISABLED takes unauthenticated sessions.
    case "$ORIGIN:$CE" in
      none:http://localhost*|none:http://127.0.0.1*|none:https://localhost*|none:https://127.0.0.1*) ;;
@@ -105,8 +105,8 @@ allowed-tools: mcp__cloudaeye__describe_change
 
    | output | what to do with it |
    |---|---|
-   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user to run `/cloudaeye-setup`. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
-   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user to run `/cloudaeye-setup`, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
+   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user the key on this machine has to change. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
+   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user CloudAEye is not set up on this machine, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
    | `session_id=…` | Pass it to the MCP tool. |
    | `diff_bytes=0` | Nothing pending — report "nothing to describe" and stop. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age` — a year-old `base_age` means anything merged since is invisible here. |
@@ -118,7 +118,7 @@ allowed-tools: mcp__cloudaeye__describe_change
    **Which baseline applied must reach the user.** Every degradation still produces output that looks correct, so silence about it is the one failure mode that misleads. Keeping the clone current is the developer's job — the skill never forces a fetch, it just refuses to hide what it used.
 2. Call the `mcp__cloudaeye__describe_change` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
-   - `intent`: the user's original task request from this coding session, passed verbatim. Do not paraphrase. If `/cloudaeye-review` already set an intent this turn, pass the same string.
+   - `intent`: the user's original task request from this coding session, passed verbatim. Do not paraphrase. If `/cloudaeye:review` already set an intent this turn, pass the same string.
    - `context`: omit unless you have something extra to pass (e.g. `pr_title`). Identity fields are already on the session.
 3. Print the `description` field from the response verbatim. It is plain markdown — a `# Change Description` paragraph followed by an `## Important Changes` bullet list — meant for direct consumption (no XML wrappers, no `<details>`). For trivial diffs the description is a single-sentence "Trivial change —" line; do not pad it.
 

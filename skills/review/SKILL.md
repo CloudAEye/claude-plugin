@@ -1,21 +1,15 @@
 ---
-name: cloudaeye-security
-description: Security review of the uncommitted changes in this repo — OWASP-style application security plus the LLM, AI-agent and MCP surfaces, and secrets leaked on the changed lines. Reports findings with file, line and severity; it never edits code on its own.
-when_to_use: Use when the change touches auth, untrusted input, secrets, crypto, deserialization, prompts, tool definitions or agent orchestration, or whenever the user asks for a security review.
+name: review
+description: Full CloudAEye review of the uncommitted changes in this repo — bugs and security in one pass. Reports findings with file, line and severity, grouped by kind; it never edits code on its own. The widest and most expensive of the CloudAEye passes.
+when_to_use: Use before opening a significant PR, or when the user asks for a full, complete or thorough review. For the routine check after finishing a task use /cloudaeye:inspect; for the security surface alone use /cloudaeye:security.
 allowed-tools: mcp__cloudaeye__inspect_diff
 ---
 
 ## When to run
 
-The user invoked `/cloudaeye-security`, or asked for a security review of the pending change. This is the **only** skill that turns the security prompts on for a security-only pass — `/cloudaeye-inspect` deliberately runs bugs only, and `/cloudaeye-review` runs both.
+The user invoked `/cloudaeye:review`, or asked for a full/complete/thorough review. This is the widest pass: everything `/cloudaeye:inspect` checks **plus** everything `/cloudaeye:security` checks, in a single call.
 
-Do not run this uninvited after an ordinary coding task. Do suggest it (without running it) when the change touches:
-
-- authentication, authorization, session or token handling
-- input arriving from an untrusted source (HTTP, queue, file upload, CLI)
-- deserialization, XML parsing, template rendering, shell or SQL construction
-- secrets, credentials, crypto, or anything written to logs
-- LLM prompts, tool/function definitions, MCP servers, or agent loops
+It costs more than either alone — every enabled category rides in the per-file scan prompt. For the routine after-a-coding-task check, `/cloudaeye:inspect` is the right skill. Reach for this one before a significant PR, on a change large enough to warrant the extra passes, or when the user asks for it by name.
 
 ## Steps
 
@@ -44,8 +38,8 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
    # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
    # X-User-Name, plus `url` minus its /mcp suffix) — the entry `claude mcp add`
    # writes, which a hand-registered server has and a plugin install does not;
-   # then ~/.cloudaeye/config.json, which `npx @cloudaeye/cli login` writes and
-   # which is the layer a plugin install normally resolves from.
+   # then ~/.cloudaeye/config.json, which is the layer a plugin install
+   # normally resolves from.
    # Read projects[cwd] before the root mcpServers,
    # matching how Claude Code resolves local scope over user scope. NOT
    # ~/.claude/mcp.json: that file is inert, Claude Code never reads it, and a key
@@ -67,7 +61,7 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
    case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
    # No key resolved from any layer. Fail here in milliseconds rather than after a
    # round-trip, and name it as "never set up" rather than "key rejected" — the fix
-   # is /cloudaeye-setup, not a retry. Localhost is exempt: a dev server started
+   # is a credential, not a retry. Localhost is exempt: a dev server started
    # with CLOUDAEYE_AUTH_DISABLED takes unauthenticated sessions.
    case "$ORIGIN:$CE" in
      none:http://localhost*|none:http://127.0.0.1*|none:https://localhost*|none:https://127.0.0.1*) ;;
@@ -117,8 +111,8 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
 
    | output | what to do with it |
    |---|---|
-   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user to run `/cloudaeye-setup`. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
-   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user to run `/cloudaeye-setup`, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
+   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user the key on this machine has to change. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
+   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user CloudAEye is not set up on this machine, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
    | `session_id=…` | Pass it to the MCP tool. |
    | `diff_bytes=0` | Nothing pending — report "nothing to review" and stop. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age` — a year-old `base_age` means anything merged since is invisible here. |
@@ -128,36 +122,36 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
    | a `target_branch_error` about `tenant_key` | The tenant authenticated but the repo isn't integrated under it: no baseline branch, no code-context graph. It still runs, against local `HEAD`. Say it once. |
 
    **Which baseline applied must reach the user.** Every degradation still produces output that looks correct, so silence about it is the one failure mode that misleads. Keeping the clone current is the developer's job — the skill never forces a fetch, it just refuses to hide what it used.
-2. Write a one-paragraph intent summary describing **the code change you just made in this round of edits**, with the security-relevant surface named explicitly — which inputs are now trusted, what the new code authenticates or authorizes, what it serializes, logs, or passes to a shell/query/prompt. The planner uses this verbatim to decide which of the security report types to attach to which files. Intent is also the **only** mechanism for telling the reviewer to leave a previously-flagged issue alone; if the user has accepted a risk, say so here in plain words so it is visible to them.
+2. Write a one-paragraph intent summary describing **the code change you just made in this round of edits** — what you implemented and why, plus any security-relevant surface it touches (untrusted input, auth, secrets, serialization, prompts, tool definitions). Not a re-statement of the original ask. The planner uses this verbatim to prioritise within the full category set, and it is the **only** channel for telling the reviewer to leave a previously-flagged issue alone — so if you are asking it to skip something, say which finding and why, in words the user can see.
 3. Call the `mcp__cloudaeye__inspect_diff` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
    - `intent`: the summary from step 2
-   - `profile`: `"security"` — **always this value from this skill.**
-   - `context`: optional — only set for `pr_title`. Do not pass `review_config` or `report_types`; they override the profile and are how you accidentally ship a half-configured security pass.
+   - `profile`: `"review"` — **always this value from this skill.** It selects every valid prompt: the bug categories and the full security surface.
+   - `context`: optional — only set for `pr_title` / `pr_description`. Do not pass `review_config` or `report_types`; either one overrides the profile and narrows the review you were asked to run.
 
    You do **not** need to read the changed source files yourself before calling — the server has the post-edit contents staged and examines them with its own tooling.
 4. Report the response to the user:
    - **First: `verdict` is `error`, or the response carries a `degraded` block.** The review ran with no post-edit source staged, so every prompt saw an empty file and the secret scan never picked a detector (`secret_scan.detector: "none"` is the tell). **Report it as a failed run and stop — do not present the findings, and never call it clean.** `degraded.cause` names the upstream reason when there is one; `context_refresh.status` of `skipped`/`failed` carries it verbatim, and an expired GitHub installation token is the usual culprit. The server does not cache a degraded run, so re-running once the cause is fixed gives a real review.
    - The `verdict` (`approve` / `request_changes`).
    - **Report what came back, not what didn't.** Don't list report types that produced no findings, don't quote timings, file counts or detector names that worked, and don't explain which prompts didn't fire. The response deliberately omits that metadata; narrating its absence turns a three-line result into a wall of caveats. A diagnostic field the response *does* carry is there precisely because it changes what the result means — those you report.
-   - Every finding, grouped by `report_type`, with file, line, severity, and message. Keep the report-type grouping — "application security", "LLM/agent security", and "leaked secret" are different audiences and different fixes. Put `SECRET_REPORT` findings **first**: a committed credential is the one finding here with a clock on it.
-   - When the response carries `secret_scan.detector == "regex-scanner"`, say so in one line alongside a clean secret result: gitleaks isn't installed on the server, so only prefixed tokens were checked, not high-entropy strings. Don't mention it when secrets *were* found, and don't mention it at all when the detector was gitleaks.
-   - If there are findings, ask which (if any) to fix — list them by number or tag. Do not start editing until the user replies.
+   - Every finding, **grouped by `report_type`** — leaked secrets first (a committed credential has a clock on it), then bugs, then application security, then LLM / AI-agent / MCP security. Within each group give file, line, severity, and message. The grouping is what makes a long list readable; don't flatten it.
+   - The `counts` roll-up, so the user sees the shape before the detail.
+   - If there are findings, ask which (if any) to fix — list them by number or tag. Do not start editing until the user replies. After fixing, re-invoke this skill (the server resumes the same review session) and write a fresh intent naming the findings you addressed.
 
 ## What this profile runs
 
-- **SECURITY_REPORT** — injection protection, auth and access control, sensitive-data handling, deserialization, security misconfiguration, XXE.
-- **LLM_SECURITY_REPORT** — prompt injection, improper output handling, sensitive-data exposure, vector/embedding weaknesses, system-prompt leakage, misinformation, unbounded consumption.
-- **AIAGENT_SECURITY_REPORT** — intent breaking, memory poisoning, tool misuse, privilege compromise, resource overload, cascading hallucination, repudiation, human-in-the-loop overload, unexpected RCE, rogue-agent injection.
-- **MCP_REPORT** — server metadata, tool/resource/prompt definitions, parameter descriptions and constraints, error handling, timeouts, tool safety, elicitation patterns.
-- **SECRET_REPORT** — hardcoded credentials. Not a prompt set: gitleaks (or a regex fallback when it isn't installed) scans the post-edit files, hits are filtered to the diff's changed lines, and the survivors go to the model to separate real credentials from placeholders and test fixtures. The secret value itself is never carried anywhere — not in the finding, not in the prompt.
+Everything the pipeline supports:
 
-The three extended security report types are **pattern-gated server-side**: the planner attaches them only to file groups with matching evidence (LLM API calls, an agent framework, MCP server/client code). A repo with none of that pays nothing for them, so there is no reason to pre-filter on the client.
+- **BUG_REPORT** — logic errors, syntax/compile breaks, edge cases, input validation, concurrency safety, error handling, code clarity, naming consistency, code signatures, performance, dead imports.
+- **SECURITY_REPORT** — injection, auth and access, sensitive-data handling, deserialization, security misconfiguration, XXE.
+- **LLM_SECURITY_REPORT / AIAGENT_SECURITY_REPORT / MCP_REPORT** — the LLM, agent, and MCP security surfaces. Pattern-gated server-side: the planner attaches them only to file groups with matching evidence, so a repo with no LLM/agent/MCP code pays nothing for them.
+- **SECRET_REPORT** — hardcoded credentials on the changed lines, found by gitleaks (or a regex fallback) and validated by the model. Report these **first**; a committed credential is the one finding with a clock on it.
+
+Duplicate-code detection is not part of any profile here — it needs the vector store that the pre-commit server doesn't run.
 
 ## Notes
 
 - **Single-shot** — one call, report the output, done. No fix-and-retry loop inside the skill.
-- Bug-only categories (performance, dead imports, duplicate code) do **not** run here. For bugs and security in one pass, use `/cloudaeye-review`.
-- Pre-commit only: the diff is always `git diff` (working tree vs `HEAD`). Committing moves `HEAD`; the review session persists and its recorded `head` is refreshed on the next call.
-- A clean `approve` means no finding cleared the reviewer's confidence bar on the changed lines — it is not a security audit of the whole repo. Say so if the user reads it as one.
+- Expect more findings, and more low-severity ones, than `/cloudaeye:inspect`. Present them by severity within each report type so the user can triage rather than wade.
+- Pre-commit only: the diff is always `git diff` (working tree vs `HEAD`). Committing moves `HEAD`, but the review session persists — its recorded `head` is refreshed on the next call, and prior intent carries across.
 - If `inspect_diff` is unavailable (MCP not connected), warn the user and skip.

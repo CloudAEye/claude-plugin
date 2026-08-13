@@ -1,5 +1,5 @@
 ---
-name: cloudaeye-check-task
+name: check-task
 description: Check whether the uncommitted changes in this repo actually do what the task asked. Takes a GitHub issue URL, Jira ticket IDs, a mixed reference list, or freeform task text, and returns a DONE / NOT DONE verdict with a per-requirement checklist and the gaps.
 when_to_use: Use before marking work complete, or when the user asks whether the change satisfies an issue, a ticket, or the request they made. Accepts an issue URL, IDs like BETA-5225, a list of both, or plain text.
 argument-hint: "[issue URL | TICKET-123 | task description]"
@@ -10,7 +10,7 @@ allowed-tools: mcp__cloudaeye__check_task
 
 The skill accepts an optional task spec as its invocation argument. When present, use it as the task input and **do not re-prompt** the user (still confirm before reusing a `prior_task`). Recognised forms:
 
-- **Jira ticket IDs** — a bracketed or bare comma list of `PROJECT-NUMBER` keys, e.g. `/cloudaeye-check-task [BETA-5225, BETA-5223]` or `/cloudaeye-check-task BETA-5225`. Detect with `\b[A-Z][A-Z0-9]+-\d+\b`. Route to `task_source="jira"`.
+- **Jira ticket IDs** — a bracketed or bare comma list of `PROJECT-NUMBER` keys, e.g. `/cloudaeye:check-task [BETA-5225, BETA-5223]` or `/cloudaeye:check-task BETA-5225`. Detect with `\b[A-Z][A-Z0-9]+-\d+\b`. Route to `task_source="jira"`.
 - **GitHub issue URL** — `https://github.com/<owner>/<repo>/issues/<n>`. Route to `task_source="github-issue"`. Short refs (`#42`, `owner/repo#42`) and mixed Jira+GitHub lists (`[BETA-5225, #42]`) also resolve server-side.
 - **Freeform text** — anything else. Route to `task_source="user-text"` (or `jira`/`spec` if the text is clearly that). Text that merely *mentions* tickets ("verify BETA-5225 is handled, keep retries intact") is fine as-is — a server-side triage model extracts the references and keeps the extra requirements; don't restructure it.
 
@@ -43,8 +43,8 @@ With no argument, fall back to asking the user (step 2).
    # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
    # X-User-Name, plus `url` minus its /mcp suffix) — the entry `claude mcp add`
    # writes, which a hand-registered server has and a plugin install does not;
-   # then ~/.cloudaeye/config.json, which `npx @cloudaeye/cli login` writes and
-   # which is the layer a plugin install normally resolves from.
+   # then ~/.cloudaeye/config.json, which is the layer a plugin install
+   # normally resolves from.
    # Read projects[cwd] before the root mcpServers,
    # matching how Claude Code resolves local scope over user scope. NOT
    # ~/.claude/mcp.json: that file is inert, Claude Code never reads it, and a key
@@ -66,7 +66,7 @@ With no argument, fall back to asking the user (step 2).
    case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
    # No key resolved from any layer. Fail here in milliseconds rather than after a
    # round-trip, and name it as "never set up" rather than "key rejected" — the fix
-   # is /cloudaeye-setup, not a retry. Localhost is exempt: a dev server started
+   # is a credential, not a retry. Localhost is exempt: a dev server started
    # with CLOUDAEYE_AUTH_DISABLED takes unauthenticated sessions.
    case "$ORIGIN:$CE" in
      none:http://localhost*|none:http://127.0.0.1*|none:https://localhost*|none:https://127.0.0.1*) ;;
@@ -116,8 +116,8 @@ With no argument, fall back to asking the user (step 2).
 
    | output | what to do with it |
    |---|---|
-   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user to run `/cloudaeye-setup`. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
-   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user to run `/cloudaeye-setup`, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
+   | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user the key on this machine has to change. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
+   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user CloudAEye is not set up on this machine, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
    | `session_id=…` | Pass it to the MCP tool. |
    | `diff_bytes=0` | Nothing pending — report "nothing to check — no pending changes" and stop. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age` — a year-old `base_age` means anything merged since is invisible here. |
@@ -151,7 +151,7 @@ With no argument, fall back to asking the user (step 2).
 
    Check `context_refresh.status` first. On `skipped` or `failed` the stored code graph was not refreshed with this diff, so the answer is based on the pre-edit code plus the diff text alone — say so in one line and quote `context_refresh.reason`. It is usually an expired GitHub installation token, which the user has to fix server-side.
 
-   The response also carries a machine-readable `verdict`: **`DONE`** (every requirement met), **`NOT_DONE`** (anything less — a single partial requirement is not "done"), or **`ERROR`** (the check could not run; not a judgement on the change). On `NOT_DONE`, ask the user whether they'd like you to close the listed gaps. Don't start editing until the user replies; if they say yes, make the edits and re-invoke `/cloudaeye-check-task` (the server resumes the same review session and offers the prior task for reuse). On `ERROR`, say what failed and offer the workaround — usually pasting the ticket body as freeform text.
+   The response also carries a machine-readable `verdict`: **`DONE`** (every requirement met), **`NOT_DONE`** (anything less — a single partial requirement is not "done"), or **`ERROR`** (the check could not run; not a judgement on the change). On `NOT_DONE`, ask the user whether they'd like you to close the listed gaps. Don't start editing until the user replies; if they say yes, make the edits and re-invoke `/cloudaeye:check-task` (the server resumes the same review session and offers the prior task for reuse). On `ERROR`, say what failed and offer the workaround — usually pasting the ticket body as freeform text.
 
 ## Notes
 
