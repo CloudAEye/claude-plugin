@@ -42,7 +42,9 @@ Do **not** use it as a review. It returns no findings and no verdict. If the use
    # Nothing about the developer lives in the project. The key, tenant, user and
    # server URL resolve per field from, in order: the environment; the cloudaeye
    # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
-   # X-User-Name, plus `url` minus its /mcp suffix) — the entry `claude mcp add`
+   # X-User-Name, plus `url` verbatim: the transport is served at the ingress
+   # prefix itself, so the base URL and the transport URL are one string) — the
+   # entry `claude mcp add`
    # writes, which a hand-registered server has and a plugin install does not;
    # then ~/.cloudaeye/config.json, which is the layer a plugin install
    # normally resolves from.
@@ -58,7 +60,7 @@ Do **not** use it as a review. It returns no findings and no verdict. If the use
    # The key goes to a curl config file rather than the command line so it stays
    # out of the process table, and is filtered to key characters first: an
    # unfiltered value injects curl directives (output/upload-file/proxy).
-   $PY -c "import json,os,re,sys;L=lambda p:(json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {});H=os.path.expanduser('~');C=L(os.path.join(H,'.claude.json'));M=lambda d:((d or {}).get('mcpServers') or {}).get('cloudaeye') or {};S=M((C.get('projects') or {}).get(os.getcwd())) or M(C);D=S.get('headers') or {};E=os.environ.get;LAY=[('env',{'api_key':E('CLOUDAEYE_API_KEY'),'tenant_key':E('CLOUDAEYE_TENANT_KEY'),'user_name':E('CLOUDAEYE_USER_NAME'),'url':E('CLOUDAEYE_URL')}),('claude',{'api_key':D.get('X-Product-API-Key'),'tenant_key':D.get('X-Tenant-Key'),'user_name':D.get('X-User-Name'),'url':re.sub(r'/mcp/?\Z','',str(S.get('url') or ''))}),('home',L(os.path.join(H,'.cloudaeye','config.json')))];P=lambda f:next(((str(l.get(f) or '').strip(),n) for n,l in LAY if str(l.get(f) or '').strip()),('','none'));k,o=P('api_key');k=k if re.fullmatch(r'[A-Za-z0-9._-]{8,128}',k) else '';W=lambda n,b:open(os.path.join(sys.argv[5],n),'wb').write(b);json.dump({'repo':sys.argv[1],'branch':sys.argv[2],'head':sys.argv[3],'language':sys.argv[4],'tenant_key':P('tenant_key')[0],'user_name':P('user_name')[0]},open('.cloudaeye/session/req.json','w'));W('curl.cfg',('header = \"X-Product-API-Key: %s\"\n' % k).encode() if k else b'');W('base_url',(P('url')[0] or 'http://localhost:8000').encode());W('origin',(o if k else 'none').encode())" "$REPO" "$BRANCH" "$HEAD_SHA" "$LANG_HINT" "$CE_TMP"
+   $PY -c "import json,os,re,sys;L=lambda p:(json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {});H=os.path.expanduser('~');C=L(os.path.join(H,'.claude.json'));M=lambda d:((d or {}).get('mcpServers') or {}).get('cloudaeye') or {};S=M((C.get('projects') or {}).get(os.getcwd())) or M(C);D=S.get('headers') or {};E=os.environ.get;LAY=[('env',{'api_key':E('CLOUDAEYE_API_KEY'),'tenant_key':E('CLOUDAEYE_TENANT_KEY'),'user_name':E('CLOUDAEYE_USER_NAME'),'url':E('CLOUDAEYE_URL')}),('claude',{'api_key':D.get('X-Product-API-Key'),'tenant_key':D.get('X-Tenant-Key'),'user_name':D.get('X-User-Name'),'url':str(S.get('url') or '').rstrip('/')}),('home',L(os.path.join(H,'.cloudaeye','config.json')))];P=lambda f:next(((str(l.get(f) or '').strip(),n) for n,l in LAY if str(l.get(f) or '').strip()),('','none'));k,o=P('api_key');k=k if re.fullmatch(r'[A-Za-z0-9._-]{8,128}',k) else '';W=lambda n,b:open(os.path.join(sys.argv[5],n),'wb').write(b);json.dump({'repo':sys.argv[1],'branch':sys.argv[2],'head':sys.argv[3],'language':sys.argv[4],'tenant_key':P('tenant_key')[0],'user_name':P('user_name')[0]},open('.cloudaeye/session/req.json','w'));W('curl.cfg',('header = \"X-Product-API-Key: %s\"\n' % k).encode() if k else b'');W('base_url',(P('url')[0] or 'http://localhost:8000').encode());W('origin',(o if k else 'none').encode())" "$REPO" "$BRANCH" "$HEAD_SHA" "$LANG_HINT" "$CE_TMP"
    [ -s .cloudaeye/session/req.json ] || { echo "cloudaeye_error=bad_config"; exit 1; }
    CFG="$CE_TMP/curl.cfg"; [ -f "$CFG" ] || : > "$CFG"
    CE=$(cat "$CE_TMP/base_url" | tr -d '\r\n'); ORIGIN=$(cat "$CE_TMP/origin" | tr -d '\r\n')
@@ -131,7 +133,7 @@ Do **not** use it as a review. It returns no findings and no verdict. If the use
 2. Call the `mcp__cloudaeye__ask` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
    - `question`: the user's question **verbatim**. Do not summarise it, do not expand it into a "better" question, do not split it into several. The phrasing is what they meant; a rewritten question gets a different answer to a question nobody asked. If the question was implicit in conversation ("wait, does that break the retry path?"), quote it as they said it.
-   - `intent`: optional — one paragraph on what you just changed, if the question is about your edit. Context for the question, not its subject.
+   - `intent`: optional — one paragraph on what you just changed, if the question is about your edit. Context for the question, not its subject. Write it from your own working context; do not read `.cloudaeye/session/session.diff` or run `git diff` to compose it — the server already has the diff.
    - `context`: optional — only `pr_title` / `pr_description`.
 
    You do **not** need to read the changed source files yourself first — the server has the post-edit contents staged and its own tooling to trace through them.
