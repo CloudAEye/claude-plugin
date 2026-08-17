@@ -2,7 +2,7 @@
   "mcpServers": {
     "cloudaeye": {
       "type": "http",
-      "url": "${CLOUDAEYE_URL:-http://localhost:8000}"
+      "url": "${CLOUDAEYE_URL:-https://api.cloudaeye.com/mcp}"
     }
   }
 }
