@@ -2,7 +2,7 @@
 name: security
 description: Security review of the uncommitted changes in this repo — OWASP-style application security plus the LLM, AI-agent and MCP surfaces, and secrets leaked on the changed lines. Reports findings with file, line and severity; it never edits code on its own.
 when_to_use: Use when the change touches auth, untrusted input, secrets, crypto, deserialization, prompts, tool definitions or agent orchestration, or whenever the user asks for a security review.
-allowed-tools: mcp__cloudaeye__inspect_diff
+allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__inspect_diff", "mcp__cloudaeye__inspect_diff"]
 ---
 
 ## When to run
@@ -40,27 +40,45 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
    REPO=$(basename -s .git "$(git config --get remote.origin.url)"); [ -n "$REPO" ] || REPO=$(basename "$PWD")
    BRANCH=$(git rev-parse --abbrev-ref HEAD); HEAD_SHA=$(git rev-parse HEAD)
    # Nothing about the developer lives in the project. The key, tenant, user and
-   # server URL resolve per field from, in order: the environment; the cloudaeye
-   # entry in ~/.claude.json (headers X-Product-API-Key / X-Tenant-Key /
-   # X-User-Name, plus `url` verbatim: the transport is served at the ingress
-   # prefix itself, so the base URL and the transport URL are one string) — the
-   # entry `claude mcp add`
-   # writes, which a hand-registered server has and a plugin install does not;
-   # then ~/.cloudaeye/config.json, which is the layer a plugin install
-   # normally resolves from.
-   # Read projects[cwd] before the root mcpServers,
-   # matching how Claude Code resolves local scope over user scope. NOT
-   # ~/.claude/mcp.json: that file is inert, Claude Code never reads it, and a key
-   # placed there would authenticate these curl calls while every MCP tool call
-   # went out bare. The outer two layers are an escape hatch, not a feature —
-   # .claude.json is Claude Code's file, so a change to its shape would otherwise
-   # break every skill at once with no way to supply a key.
+   # server URL resolve per field from, in order:
+   #
+   #   env     CLOUDAEYE_* in the environment. The escape hatch for CI and
+   #           on-prem, and the only layer settable without the plugin.
+   #   plugin  CLAUDE_PLUGIN_OPTION_*, the values Claude Code prompts for at
+   #           install time from `userConfig` in plugin.json, with the key held
+   #           in the OS keychain rather than a file. Storing a plugin's own
+   #           credential is what that mechanism is for, so it is the intended
+   #           path for a normal install.
+   #   pdata   the file scripts/sync-creds.sh writes into the plugin data dir
+   #           from those same values. Needed only if CLAUDE_PLUGIN_OPTION_* does
+   #           not reach a Bash tool call: it is documented as reaching hook and
+   #           MCP subprocesses, which is not the same thing. auth_from= names
+   #           whichever of the two answered, so the first install settles it and
+   #           the loser can be deleted.
+   #   claude  headers on the cloudaeye entry in ~/.claude.json, which
+   #           `claude mcp add` writes and a plugin install does not. An escape
+   #           hatch, not a feature: .claude.json is Claude Code's file, so a
+   #           change to its shape would otherwise break every skill at once.
+   #
+   # Read projects[cwd] before the root mcpServers, matching how Claude Code
+   # resolves local scope over user scope. NOT ~/.claude/mcp.json: that file is
+   # inert, Claude Code never reads it, and a key placed there would authenticate
+   # these curl calls while every MCP tool call went out bare.
+   #
+   # There is deliberately no "set these environment variables" step any more.
+   # On Windows a process inherits its parent's environment block, so `setx`
+   # never reaches a Claude Code that is already running. Observed 2026-08-17:
+   # every claude.exe on the machine descended from one root process older than
+   # the setx, so each restart re-inherited the same stale block and the failure
+   # presented as a server fault for hours. Not tested on macOS or Linux -- the
+   # plugin path sidesteps the question rather than answering it.
+   #
    # Everything is written to files, never read back through a shell var: Windows
    # python emits CRLF and a stray \r corrupts JSON, the URL and any git ref.
    # The key goes to a curl config file rather than the command line so it stays
    # out of the process table, and is filtered to key characters first: an
    # unfiltered value injects curl directives (output/upload-file/proxy).
-   $PY -c "import json,os,re,sys;L=lambda p:(json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {});H=os.path.expanduser('~');C=L(os.path.join(H,'.claude.json'));M=lambda d:((d or {}).get('mcpServers') or {}).get('cloudaeye') or {};S=M((C.get('projects') or {}).get(os.getcwd())) or M(C);D=S.get('headers') or {};E=os.environ.get;LAY=[('env',{'api_key':E('CLOUDAEYE_API_KEY'),'tenant_key':E('CLOUDAEYE_TENANT_KEY'),'user_name':E('CLOUDAEYE_USER_NAME'),'url':E('CLOUDAEYE_URL')}),('claude',{'api_key':D.get('X-Product-API-Key'),'tenant_key':D.get('X-Tenant-Key'),'user_name':D.get('X-User-Name'),'url':str(S.get('url') or '').rstrip('/')}),('home',L(os.path.join(H,'.cloudaeye','config.json')))];P=lambda f:next(((str(l.get(f) or '').strip(),n) for n,l in LAY if str(l.get(f) or '').strip()),('','none'));k,o=P('api_key');k=k if re.fullmatch(r'[A-Za-z0-9._-]{8,128}',k) else '';W=lambda n,b:open(os.path.join(sys.argv[5],n),'wb').write(b);json.dump({'repo':sys.argv[1],'branch':sys.argv[2],'head':sys.argv[3],'language':sys.argv[4],'tenant_key':P('tenant_key')[0],'user_name':P('user_name')[0]},open('.cloudaeye/session/req.json','w'));W('curl.cfg',('header = \"X-Product-API-Key: %s\"\n' % k).encode() if k else b'');W('base_url',(P('url')[0] or 'https://api.cloudaeye.com/mcp').encode());W('origin',(o if k else 'none').encode())" "$REPO" "$BRANCH" "$HEAD_SHA" "$LANG_HINT" "$CE_TMP"
+   $PY -c "import glob,json,os,re,sys;L=lambda p:(json.load(open(p,encoding='utf-8')) if p and os.path.exists(p) else {});H=os.path.expanduser('~');C=L(os.path.join(H,'.claude.json'));M=lambda d:((d or {}).get('mcpServers') or {}).get('cloudaeye') or {};S=M((C.get('projects') or {}).get(os.getcwd())) or M(C);D=S.get('headers') or {};E=os.environ.get;PO=lambda f:E('CLAUDE_PLUGIN_OPTION_'+f.upper());GL=glob.glob(os.path.join(H,'.claude','plugins','data','*','cloudaeye-creds.json'));G=max(GL,key=os.path.getmtime) if GL else '';LAY=[('env',{'api_key':E('CLOUDAEYE_API_KEY'),'tenant_key':E('CLOUDAEYE_TENANT_KEY'),'user_name':E('CLOUDAEYE_USER_NAME'),'url':E('CLOUDAEYE_URL')}),('plugin',{'api_key':PO('api_key'),'tenant_key':PO('tenant_key'),'user_name':PO('user_name'),'url':PO('url')}),('pdata',L(G)),('claude',{'api_key':D.get('X-Product-API-Key'),'tenant_key':D.get('X-Tenant-Key'),'user_name':D.get('X-User-Name'),'url':str(S.get('url') or '').rstrip('/')})];P=lambda f:next(((str(l.get(f) or '').strip(),n) for n,l in LAY if str(l.get(f) or '').strip()),('','none'));k,o=P('api_key');k=k if re.fullmatch(r'[A-Za-z0-9._-]{8,128}',k) else '';W=lambda n,b:open(os.path.join(sys.argv[5],n),'wb').write(b);json.dump({'repo':sys.argv[1],'branch':sys.argv[2],'head':sys.argv[3],'language':sys.argv[4],'tenant_key':P('tenant_key')[0],'user_name':P('user_name')[0]},open('.cloudaeye/session/req.json','w'));W('curl.cfg',('header = \"X-Product-API-Key: %s\"\n' % k).encode() if k else b'');W('base_url',(P('url')[0] or 'https://api.cloudaeye.com/mcp').encode());W('origin',(o if k else 'none').encode())" "$REPO" "$BRANCH" "$HEAD_SHA" "$LANG_HINT" "$CE_TMP"
    [ -s .cloudaeye/session/req.json ] || { echo "cloudaeye_error=bad_config"; exit 1; }
    CFG="$CE_TMP/curl.cfg"; [ -f "$CFG" ] || : > "$CFG"
    CE=$(cat "$CE_TMP/base_url" | tr -d '\r\n'); ORIGIN=$(cat "$CE_TMP/origin" | tr -d '\r\n')
@@ -113,30 +131,32 @@ Do not run this uninvited after an ordinary coding task. Do suggest it (without 
    cat .cloudaeye/session/session.json; echo
    ```
 
-   Set `LANG_HINT` to the repo's primary language. The block resets the scratch workspace, mints or resumes the review session on the server, resolves the baseline, captures the diff and uploads it. If the `mcp__cloudaeye__inspect_diff` schema is not loaded yet, load it **in the same message** as this command so the two overlap instead of queueing.
+   Set `LANG_HINT` to the repo's primary language. The block resets the scratch workspace, mints or resumes the review session on the server, resolves the baseline, captures the diff and uploads it. If CloudAEye's `inspect_diff` tool schema is not loaded yet, load it **in the same message** as this command so the two overlap instead of queueing.
 
    It prints two summary lines and then the raw session JSON. Read them — don't re-derive any of it:
 
    | output | what to do with it |
    |---|---|
    | `cloudaeye_error=…` | Stop and report it. **Every one of these lines carries `auth_from=` — read it rather than inferring whether credentials resolved.** A failure that is not about credentials still prints the layer that supplied them. `auth_failed` = the key was refused and the JSON body below says which (missing/invalid/inactive key, a tenant the key does not belong to, or a key without the `Code Review` product) — the fix is a credential change, not a retry, so tell the user the key on this machine has to change. `not_configured` = no credentials on this machine at all (see the next row). `insecure_url` = an off-box server over plain `http`, refused because the key would cross the network in clear. `session_failed` = nothing answered at that URL. `bad_config` = the config JSON is malformed. `python_not_found` = no usable interpreter on PATH. |
-   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user CloudAEye is not set up on this machine, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
+   | `cloudaeye_error=not_configured` | No CloudAEye credentials were found on this machine. Nothing else in this skill can run. Tell the user to run `/cloudaeye:init`, which signs them in through the browser and stores them, then stop — don't substitute your own reading of the diff for the CloudAEye run. |
    | `session_id=…` | Pass it to the MCP tool. |
    | `diff_bytes=0` | Nothing pending — report "nothing to review" and stop. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age` — a year-old `base_age` means anything merged since is invisible here. |
    | `base_source=head` | Degraded: only working-tree edits are in the diff. Say so, and pass on `target_branch_error` from the JSON if it is set. |
    | `upload_http=` not `200` | The diff never reached the server. Stop — the call would run against absent or stale content and still look clean. |
-   | `auth_from=` | Which layer supplied the key — `home` (`~/.cloudaeye/config.json`), `env`, or `claude` (`~/.claude.json`). `auth_from=none` can only reach this line against a localhost server, and means that server has auth switched off; anywhere else it short-circuits above as `not_configured`. |
+   | `auth_from=` | Which layer supplied the key — `env`, `plugin` (the plugin's own settings), `pdata` (the file `/cloudaeye:init` wrote), or `claude` (`~/.claude.json`). `auth_from=none` can only reach this line against a localhost server, and means that server has auth switched off; anywhere else it short-circuits above as `not_configured`. |
    | a `target_branch_error` about `tenant_key` | The tenant authenticated but the repo isn't integrated under it: no baseline branch, no code-context graph. It still runs, against local `HEAD`. Say it once. |
 
    **Which baseline applied must reach the user.** Every degradation still produces output that looks correct, so silence about it is the one failure mode that misleads. Keeping the clone current is the developer's job — the skill never forces a fetch, it just refuses to hide what it used.
 2. Write a one-paragraph intent summary describing **the code change you just made in this round of edits**, with the security-relevant surface named explicitly — which inputs are now trusted, what the new code authenticates or authorizes, what it serializes, logs, or passes to a shell/query/prompt. The planner uses this verbatim to decide which of the security report types to attach to which files. Intent is also the **only** mechanism for telling the reviewer to leave a previously-flagged issue alone; if the user has accepted a risk, say so here in plain words so it is visible to them.
    - **Do not read the diff to write this.** No `cat .cloudaeye/session/session.diff`, no `git diff`. You made these edits — the intent comes from your own working context. The diff is already uploaded and the server is what analyses it, so reading it back spends the developer's context window re-deriving what you already know, on a file that can run to thousands of lines. If you genuinely did not make the changes (a resumed session, or the user edited by hand), say that in one line and use `git diff --stat` for the file list — never the full diff.
-3. Call the `mcp__cloudaeye__inspect_diff` MCP tool with:
+3. Call CloudAEye's `inspect_diff` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
    - `intent`: the summary from step 2
    - `profile`: `"security"` — **always this value from this skill.**
    - `context`: optional — only set for `pr_title`. Do not pass `review_config` or `report_types`; they override the profile and are how you accidentally ship a half-configured security pass.
+
+   Its full name depends on how CloudAEye was installed — `mcp__plugin_cloudaeye_cloudaeye__inspect_diff` from the plugin marketplace, `mcp__cloudaeye__inspect_diff` if the server was registered by hand with `claude mcp add`. Both are pre-approved in this skill's frontmatter, so use whichever one is in your tool list and don't ask for permission first.
 
    You do **not** need to read the changed source files yourself before calling — the server has the post-edit contents staged and examines them with its own tooling.
 4. Report the response to the user:
