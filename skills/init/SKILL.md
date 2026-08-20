@@ -41,42 +41,21 @@ flow, never to collect a credential in the chat.
    behind this call. Announcing "the tool is available, so CloudAEye is authenticated"
    is wrong and contradicts the refusal you are about to read out.
 
-2. **Call CloudAEye's `get_credentials` MCP tool.** It takes no arguments, on purpose:
-   the account and organisation come from the token, so there is nothing to point at
-   somebody else.
+2. **Run the setup block below with `CE_CODE` and `CE_CLAIM_URL` left empty.**
 
-   Its full name depends on how CloudAEye was installed —
-   `mcp__plugin_cloudaeye_cloudaeye__get_credentials` from the plugin marketplace,
-   `mcp__cloudaeye__get_credentials` if the server was registered by hand with
-   `claude mcp add`. Both are pre-approved in this skill's frontmatter, so use whichever
-   one is in your tool list and don't ask for permission first.
+   This is a probe. On a machine that is already set up it does the whole job —
+   confirms the credentials work, checks whether *this repository* is connected, and
+   opens the browser if it is not. Most re-runs of `init` end here, having fetched
+   nothing.
 
-   - `"status": "error"` — report the `error` string to the user verbatim and stop. It
-     is written for them and says whether to retry, re-authenticate, or report it.
-     Two you will see while the console side is still being built: *"this review server
-     does not have sign-in configured"* (the server has not enabled it yet — nothing
-     the user can fix), and *"not signed in"* (go back to step 1).
+   Read the output:
 
-     On that first one, add one line about what is **not** broken: if a key is already
-     resolving on this machine, the review commands keep working, because they
-     authenticate to `/session` with the product API key and never needed a sign-in
-     token. Only `init` is blocked. Say it — otherwise a failed setup reads as
-     "CloudAEye is down" when nothing of theirs is.
-   - `"status": "ok"` — carry `claim_code` and `claim_url` into step 3.
-
-   **There is no API key in that response, and that is deliberate.** A tool result is
-   part of this conversation, and Claude Code writes conversations to disk — so a key
-   returned here would land in a transcript every time anyone runs setup. Instead you
-   get a **single-use code, valid for two minutes**, which step 3 exchanges for the real
-   credentials directly into a file. You never see the key, so you cannot leak it.
-
-   Spend the code promptly — run step 3 as your next action, not after other work.
-
-3. **Redeem, store and verify**, as one Bash call. Substitute the two values from step 2
-   into the first line, each inside single quotes, and change nothing else.
+   - **`setup=absent`** — no credentials on this machine. Go to step 3.
+   - **anything else** — already set up. Skip steps 3 and 4 entirely and report
+     (step 5). Do not fetch a credential nobody needs.
 
    ```bash
-   export CE_CODE='<claim_code>' CE_CLAIM_URL='<claim_url>'
+   export CE_CODE='' CE_CLAIM_URL=''   # step 2 leaves these empty; step 4 fills them in
    # The environment, not the argument list: argv is world-readable in the process
    # table on most systems.
    for c in python python3 py; do command -v $c >/dev/null 2>&1 && $c -c "" 2>/dev/null && { PY=$c; break; }; done
@@ -103,9 +82,12 @@ print(d)
 " | tr -d '\r\n')
    [ -n "$CE_DIR" ] || { echo "cloudaeye_error=no_data_dir"; exit 1; }
    OUT="$CE_DIR/cloudaeye-creds.json"
-   # The exchange. curl writes the response body straight to a file — the key is
-   # never in a variable, never on a command line, and never in anything you read.
-   # Do not cat this file afterwards.
+   # The exchange, only when a code was supplied. With none, this is the probe
+   # pass: everything below still runs, and reports what is already set up.
+   if [ -n "$CE_CODE" ]; then
+   # curl writes the response body straight to a file — the key is never in a
+   # variable, never on a command line, and never in anything you read. Do not
+   # cat this file afterwards.
    R_HTTP=$(curl -s -m 30 -o "$OUT.tmp" -w '%{http_code}' -X POST "$CE_CLAIM_URL" \
      -H 'Content-Type: application/json' --data-binary "$($PY -c "
 import json, os
@@ -134,6 +116,7 @@ except OSError:
 os.replace(tmp, sys.argv[2])      # atomic: a concurrent session never reads a torn file
 print('stored=' + sys.argv[2])
 " "$OUT.tmp" "$OUT" || { rm -f "$OUT.tmp"; exit 1; }
+   fi
    # The key is out of this shell from here on. Everything below resolves it the way
    # the review skills do, through the file just written — so "setup complete" means
    # the path they actually use works, not that a file exists.
@@ -154,15 +137,88 @@ print('stored=' + sys.argv[2])
    # "setup complete" could be a lie.
    PDATA_OK=$(cat "$CE_TMP/pdata_ok" | tr -d '\r\n')
    case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
+   # No code was given and nothing resolved: this machine is not set up yet, which
+   # on the first pass is the expected answer, not an error.
+   if [ -z "$CE_CODE" ] && [ "$ORIGIN" = "none" ]; then echo "setup=absent"; exit 0; fi
    [ "$PDATA_OK" = "1" ] || { echo "cloudaeye_error=not_readable_back url=$CE"; exit 1; }
    rm -f .cloudaeye/session/session.json
    S_HTTP=$(curl -s -m 30 -K "$CE_TMP/curl.cfg" -o .cloudaeye/session/session.json -w '%{http_code}' \
      -X POST "$CE/session" -H 'Content-Type: application/json' -d @.cloudaeye/session/req.json)
    echo "verify_http=$S_HTTP stored_resolves=$PDATA_OK auth_from=$ORIGIN url=$CE"
+   # Is THIS repository connected? The server answers it on every session, and
+   # supplies the link — the client never builds a CloudAEye URL of its own.
+   INTEG=$($PY -c "
+import json, sys
+try:
+    d = json.load(open('.cloudaeye/session/session.json', encoding='utf-8'))
+except Exception:
+    sys.exit(0)
+if d.get('target_branch_error'):
+    print('no ' + (d.get('integration_url') or ''))
+elif d.get('target_branch'):
+    print('yes ' + d['target_branch'])
+" 2>/dev/null)
+   set -- $INTEG
+   echo "integrated=${1:-unknown} ${2:+link=$2}"
+   # Open it, because the whole point of noticing is to get them there. The link
+   # is printed above regardless, so this is a convenience and never load-bearing.
+   #
+   # Fully detached — every stream redirected AND backgrounded. A browser started
+   # from here inherits this shell's stdout, and an inherited pipe is not closed
+   # when the block finishes: whatever is reading the output then waits on a
+   # browser window instead of returning. That hangs the skill, which is a far
+   # worse outcome than not opening a tab, so failure is not even detected here.
+   if [ "${1:-}" = "no" ] && [ -n "${2:-}" ]; then
+     if   command -v cmd.exe  >/dev/null 2>&1; then ( cmd.exe /c start "" "$2" </dev/null >/dev/null 2>&1 & ) 
+     elif command -v open     >/dev/null 2>&1; then ( open "$2"     </dev/null >/dev/null 2>&1 & )
+     elif command -v xdg-open >/dev/null 2>&1; then ( xdg-open "$2" </dev/null >/dev/null 2>&1 & )
+     else echo "browser_open=unavailable"
+     fi
+   fi
    cat .cloudaeye/session/session.json 2>/dev/null; echo
    ```
 
-4. **Report the outcome.** Read the printed lines; do not re-derive any of it.
+3. **Only if `setup=absent`: call CloudAEye's `get_credentials` MCP tool.** It takes no arguments, on purpose:
+   the account and organisation come from the token, so there is nothing to point at
+   somebody else.
+
+   Its full name depends on how CloudAEye was installed —
+   `mcp__plugin_cloudaeye_cloudaeye__get_credentials` from the plugin marketplace,
+   `mcp__cloudaeye__get_credentials` if the server was registered by hand with
+   `claude mcp add`. Both are pre-approved in this skill's frontmatter, so use whichever
+   one is in your tool list and don't ask for permission first.
+
+   - `"status": "error"` — report the `error` string to the user verbatim and stop. It
+     is written for them and says whether to retry, re-authenticate, or report it.
+     Two you will see while the console side is still being built: *"this review server
+     does not have sign-in configured"* (the server has not enabled it yet — nothing
+     the user can fix), and *"not signed in"* (go back to step 1).
+
+     On that first one, add one line about what is **not** broken: if a key is already
+     resolving on this machine, the review commands keep working, because they
+     authenticate to `/session` with the product API key and never needed a sign-in
+     token. Only `init` is blocked. Say it — otherwise a failed setup reads as
+     "CloudAEye is down" when nothing of theirs is.
+   - `"status": "ok"` — carry `claim_code` and `claim_url` into step 4.
+
+   **There is no API key in that response, and that is deliberate.** A tool result is
+   part of this conversation, and Claude Code writes conversations to disk — so a key
+   returned here would land in a transcript every time anyone runs setup. Instead you
+   get a **single-use code, valid for two minutes**, which step 3 exchanges for the real
+   credentials directly into a file. You never see the key, so you cannot leak it.
+
+   Spend the code promptly — run step 3 as your next action, not after other work.
+
+4. **Re-run the exact same block from step 2**, with the two values filled in:
+
+   ```bash
+   export CE_CODE='<claim_code>' CE_CLAIM_URL='<claim_url>'
+   ```
+
+   …and every other line unchanged. This time it redeems the code into the config file
+   before doing the same verification and integration check.
+
+5. **Report the outcome.** Read the printed lines; do not re-derive any of it.
 
    | output | what it means |
    |---|---|
@@ -173,7 +229,11 @@ print('stored=' + sys.argv[2])
    | `auth_from=` not `pdata` | Setup worked, but a higher layer is in charge: `env` means a `CLOUDAEYE_API_KEY` is exported in this shell, `plugin` means a key is set in the plugin's own settings. Both override the file this skill just wrote. Say which one is winning in a single line — if the user came here because reviews were failing, that layer is the thing to fix, and `init` will not have changed anything they can see. |
    | `verify_http=` 401/403 | The key the server just issued was refused by the server. Report it as a server-side problem, not a user one. |
    | `verify_http=` anything else | The server did not answer. Credentials are stored; the review server may be down. Retrying later is reasonable. |
-   | `target_branch_error` in the JSON | The tenant is fine but **this repository is not connected to CloudAEye**. Reviews still run, against local `HEAD`, with no baseline branch and no code-context graph. Tell the user to connect it at <https://console.cloudaeye.com> — installing the CloudAEye GitHub App and selecting this repository — and that reviews work in the meantime. |
+   | `setup=absent` | No credentials on this machine — this is step 2 telling you to go to step 3, not an error. |
+   | `integrated=yes` | This repository is connected: reviews get the real baseline and the code-context graph. Nothing to say beyond confirming it. |
+   | `integrated=no link=<url>` | The tenant is fine but **this repository is not connected**. A browser has already been opened at that link — say so, and say what it is for: installing the CloudAEye GitHub App and selecting this repository. Reviews still work meanwhile, against local `HEAD`, with no baseline branch and no code graph, so this is a "worth doing" not a "must do first". |
+   | `browser_open=failed` | Headless or no handler. Give them the link to open themselves; nothing else is wrong. |
+   | `integrated=unknown` | The session response had neither field — usually an older server. Ignore it rather than guessing. |
 
    Then tell them what they can run — **all six, with a few words each on when**.
    This is the only moment the plugin gets to tell someone what it does, so a
