@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cloudaeye",
   "displayName": "CloudAEye",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Pre-commit code review, security scan, and task verification.",
   "author": {
     "name": "CloudAEye",
@@ -11,19 +11,24 @@
   },
   "homepage": "https://docs.cloudaeye.com/claude-code",
   "repository": "https://github.com/CloudAEye/claude-plugin",
-  "keywords": ["code-review", "security", "pre-commit", "ai"],
+  "keywords": [
+    "code-review",
+    "security",
+    "pre-commit",
+    "ai"
+  ],
   "userConfig": {
     "api_key": {
       "type": "string",
       "title": "CloudAEye product API key",
-      "description": "Optional — leave blank and run /cloudaeye:init instead, which signs you in through your browser and fills this in for you. Only needed if you already have a key from console.cloudaeye.com.",
+      "description": "Optional \u2014 leave blank and run /cloudaeye:init instead, which signs you in through your browser and fills this in for you. Only needed if you already have a key from console.cloudaeye.com.",
       "sensitive": true,
       "required": false
     },
     "tenant_key": {
       "type": "string",
       "title": "Tenant key",
-      "description": "Optional — /cloudaeye:init fills this in. Only needed alongside a key you already have. Must be the tenant that key belongs to: it selects the database holding your repo integration, code-context graph and LLM configuration.",
+      "description": "Optional \u2014 /cloudaeye:init fills this in. Only needed alongside a key you already have. Must be the tenant that key belongs to: it selects the database holding your repo integration, code-context graph and LLM configuration.",
       "required": false
     },
     "user_name": {

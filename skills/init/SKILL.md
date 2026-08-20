@@ -155,9 +155,16 @@ print('stored=' + out)
    | `verify_http=` anything else | The server did not answer. Credentials are stored; the review server may be down. Retrying later is reasonable. |
    | `target_branch_error` in the JSON | The tenant is fine but **this repository is not connected to CloudAEye**. Reviews still run, against local `HEAD`, with no baseline branch and no code-context graph. Tell the user to connect it at <https://console.cloudaeye.com> — installing the CloudAEye GitHub App and selecting this repository — and that reviews work in the meantime. |
 
-   Then tell them what they can run: `/cloudaeye:inspect` after a coding task,
-   `/cloudaeye:review` before a PR, `/cloudaeye:describe`, `/cloudaeye:ask`,
-   `/cloudaeye:check-task`.
+   Then tell them what they can run — **all six, with a few words each on when**.
+   This is the only moment the plugin gets to tell someone what it does, so a
+   name they never see here is a command they never run:
+
+   - `/cloudaeye:inspect` — bug pass, cheap enough for after every coding task
+   - `/cloudaeye:security` — security pass: OWASP, LLM/agent surfaces, leaked secrets
+   - `/cloudaeye:review` — both of the above, before a significant PR
+   - `/cloudaeye:describe` — a PR description or commit message for the pending diff
+   - `/cloudaeye:ask` — a question about the change, answered against the code graph
+   - `/cloudaeye:check-task` — does this diff actually do what the ticket asked?
 
    **Never print the API key** in the summary, whole or partial.
 
