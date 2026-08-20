@@ -34,6 +34,13 @@ flow, never to collect a credential in the chat.
    Do not work around it. There is no key to ask for, no file to hand-write, and no
    other command that helps — everything downstream needs the token that flow produces.
 
+   **The reverse does not hold, so do not say it.** The tool being present does not
+   mean anyone is signed in: where the server has sign-in switched off it exposes every
+   tool to every caller, and that is the normal state until the CloudAEye console's
+   endpoints go live. Only step 2's answer tells you whether there is an identity
+   behind this call. Announcing "the tool is available, so CloudAEye is authenticated"
+   is wrong and contradicts the refusal you are about to read out.
+
 2. **Call CloudAEye's `get_credentials` MCP tool.** It takes no arguments, on purpose:
    the account and organisation come from the token, so there is nothing to point at
    somebody else.
@@ -49,6 +56,12 @@ flow, never to collect a credential in the chat.
      Two you will see while the console side is still being built: *"this review server
      does not have sign-in configured"* (the server has not enabled it yet — nothing
      the user can fix), and *"not signed in"* (go back to step 1).
+
+     On that first one, add one line about what is **not** broken: if a key is already
+     resolving on this machine, the review commands keep working, because they
+     authenticate to `/session` with the product API key and never needed a sign-in
+     token. Only `init` is blocked. Say it — otherwise a failed setup reads as
+     "CloudAEye is down" when nothing of theirs is.
    - `"status": "ok"` — carry `api_key`, `tenant_key`, `user_name` and `url` into
      step 3.
 
