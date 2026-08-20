@@ -62,20 +62,23 @@ flow, never to collect a credential in the chat.
      authenticate to `/session` with the product API key and never needed a sign-in
      token. Only `init` is blocked. Say it — otherwise a failed setup reads as
      "CloudAEye is down" when nothing of theirs is.
-   - `"status": "ok"` — carry `api_key`, `tenant_key`, `user_name` and `url` into
-     step 3.
+   - `"status": "ok"` — carry `claim_code` and `claim_url` into step 3.
 
-   **`api_key` is a live credential.** Put it in the command in step 3 and nowhere
-   else: not in your reply, not in a summary, not in a "here's what I stored" line, not
-   even truncated. The user does not need to see it and never has to type it.
+   **There is no API key in that response, and that is deliberate.** A tool result is
+   part of this conversation, and Claude Code writes conversations to disk — so a key
+   returned here would land in a transcript every time anyone runs setup. Instead you
+   get a **single-use code, valid for two minutes**, which step 3 exchanges for the real
+   credentials directly into a file. You never see the key, so you cannot leak it.
 
-3. **Store and verify**, as one Bash call. Substitute the four values from step 2 into
-   the first line, each inside single quotes, and change nothing else.
+   Spend the code promptly — run step 3 as your next action, not after other work.
+
+3. **Redeem, store and verify**, as one Bash call. Substitute the two values from step 2
+   into the first line, each inside single quotes, and change nothing else.
 
    ```bash
-   export CE_KEY='<api_key>' CE_TENANT='<tenant_key>' CE_USER='<user_name>' CE_URL='<url>'
+   export CE_CODE='<claim_code>' CE_CLAIM_URL='<claim_url>'
    # The environment, not the argument list: argv is world-readable in the process
-   # table on most systems and this value is the whole credential.
+   # table on most systems.
    for c in python python3 py; do command -v $c >/dev/null 2>&1 && $c -c "" 2>/dev/null && { PY=$c; break; }; done
    [ -n "$PY" ] || { echo "cloudaeye_error=python_not_found"; exit 1; }
    # Written to the plugin's own data directory: outside every git repository, so it
@@ -86,34 +89,51 @@ flow, never to collect a credential in the chat.
    # cloudaeye* directory, then create one. Every one of those is matched by the glob
    # the review skills read, and they take the NEWEST file, so this write wins over a
    # stale one wherever it landed.
-   $PY -c "
-import glob, json, os, sys
+   CE_DIR=$($PY -c "
+import glob, os
 H = os.path.expanduser('~')
 d = os.environ.get('CLAUDE_PLUGIN_DATA') or ''
 if not d:
     base = os.path.join(H, '.claude', 'plugins', 'data')
     found = sorted(glob.glob(os.path.join(base, '*', 'cloudaeye-creds.json')))
-    if found:
-        d = os.path.dirname(found[0])
-    else:
-        dirs = sorted(glob.glob(os.path.join(base, 'cloudaeye*')))
-        d = dirs[0] if dirs else os.path.join(base, 'cloudaeye')
-os.makedirs(d, exist_ok=True)
-out = os.path.join(d, 'cloudaeye-creds.json')
-cfg = {'api_key': os.environ.get('CE_KEY', ''), 'tenant_key': os.environ.get('CE_TENANT', ''),
-       'user_name': os.environ.get('CE_USER', ''), 'url': os.environ.get('CE_URL', '')}
-if not cfg['api_key'] or not cfg['tenant_key']:
-    print('cloudaeye_error=nothing_to_store'); sys.exit(1)
-tmp = out + '.tmp'
-with open(tmp, 'w', encoding='utf-8') as f:
-    json.dump(cfg, f)
+    d = os.path.dirname(found[0]) if found else (
+        (sorted(glob.glob(os.path.join(base, 'cloudaeye*'))) or [os.path.join(base, 'cloudaeye')])[0])
+os.makedirs(d, exist_ok=True)     # curl -o will not create the parent directory
+print(d)
+" | tr -d '\r\n')
+   [ -n "$CE_DIR" ] || { echo "cloudaeye_error=no_data_dir"; exit 1; }
+   OUT="$CE_DIR/cloudaeye-creds.json"
+   # The exchange. curl writes the response body straight to a file — the key is
+   # never in a variable, never on a command line, and never in anything you read.
+   # Do not cat this file afterwards.
+   R_HTTP=$(curl -s -m 30 -o "$OUT.tmp" -w '%{http_code}' -X POST "$CE_CLAIM_URL" \
+     -H 'Content-Type: application/json' --data-binary "$($PY -c "
+import json, os
+print(json.dumps({'code': os.environ.get('CE_CODE', '')}))")")
+   unset CE_CODE
+   case "$R_HTTP" in
+     200) ;;
+     403) rm -f "$OUT.tmp"; echo "cloudaeye_error=claim_rejected http=403 — the setup code was already used or expired; run /cloudaeye:init again"; exit 1;;
+     *)   rm -f "$OUT.tmp"; echo "cloudaeye_error=claim_failed http=$R_HTTP url=$CE_CLAIM_URL"; exit 1;;
+   esac
+   # Validate before it becomes the live file: a truncated or error body would
+   # otherwise replace working credentials with something that fails much later.
+   $PY -c "
+import json, os, sys
+tmp = sys.argv[1]
+try:
+    cfg = json.load(open(tmp, encoding='utf-8'))
+except Exception:
+    print('cloudaeye_error=claim_unreadable'); sys.exit(1)
+if not str(cfg.get('api_key', '')).strip() or not str(cfg.get('tenant_key', '')).strip():
+    print('cloudaeye_error=claim_incomplete'); sys.exit(1)
 try:
     os.chmod(tmp, 0o600)          # no-op on Windows, matters everywhere else
 except OSError:
     pass
-os.replace(tmp, out)              # atomic: a concurrent session never reads a torn file
-print('stored=' + out)
-" || exit 1
+os.replace(tmp, sys.argv[2])      # atomic: a concurrent session never reads a torn file
+print('stored=' + sys.argv[2])
+" "$OUT.tmp" "$OUT" || { rm -f "$OUT.tmp"; exit 1; }
    # The key is out of this shell from here on. Everything below resolves it the way
    # the review skills do, through the file just written — so "setup complete" means
    # the path they actually use works, not that a file exists.
