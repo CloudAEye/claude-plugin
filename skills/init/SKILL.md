@@ -56,131 +56,209 @@ flow, never to collect a credential in the chat.
 
    ```bash
    export CE_CODE='' CE_CLAIM_URL=''   # step 2 leaves these empty; step 4 fills them in
-   # The environment, not the argument list: argv is world-readable in the process
-   # table on most systems.
    for c in python python3 py; do command -v $c >/dev/null 2>&1 && $c -c "" 2>/dev/null && { PY=$c; break; }; done
    [ -n "$PY" ] || { echo "cloudaeye_error=python_not_found"; exit 1; }
-   # Written to the plugin's own data directory: outside every git repository, so it
-   # can never be committed or shipped in a diff; owned by this user; and removed with
-   # the plugin's data if they uninstall it. CLAUDE_PLUGIN_DATA names that directory
-   # when Claude Code exports it, which it does not do for every process kind — so
-   # fall back to the one an existing creds file already lives in, then to a
-   # cloudaeye* directory, then create one. Every one of those is matched by the glob
-   # the review skills read, and they take the NEWEST file, so this write wins over a
-   # stale one wherever it landed.
-   CE_DIR=$($PY -c "
-import glob, os
-H = os.path.expanduser('~')
-d = os.environ.get('CLAUDE_PLUGIN_DATA') or ''
-if not d:
-    base = os.path.join(H, '.claude', 'plugins', 'data')
-    found = sorted(glob.glob(os.path.join(base, '*', 'cloudaeye-creds.json')))
-    d = os.path.dirname(found[0]) if found else (
-        (sorted(glob.glob(os.path.join(base, 'cloudaeye*'))) or [os.path.join(base, 'cloudaeye')])[0])
-os.makedirs(d, exist_ok=True)     # curl -o will not create the parent directory
-print(d)
-" | tr -d '\r\n')
-   [ -n "$CE_DIR" ] || { echo "cloudaeye_error=no_data_dir"; exit 1; }
-   OUT="$CE_DIR/cloudaeye-creds.json"
-   # The exchange, only when a code was supplied. With none, this is the probe
-   # pass: everything below still runs, and reports what is already set up.
-   if [ -n "$CE_CODE" ]; then
-   # curl writes the response body straight to a file — the key is never in a
-   # variable, never on a command line, and never in anything you read. Do not
-   # cat this file afterwards.
-   R_HTTP=$(curl -s -m 30 -o "$OUT.tmp" -w '%{http_code}' -X POST "$CE_CLAIM_URL" \
-     -H 'Content-Type: application/json' --data-binary "$($PY -c "
-import json, os
-print(json.dumps({'code': os.environ.get('CE_CODE', '')}))")")
-   unset CE_CODE
-   case "$R_HTTP" in
-     200) ;;
-     403) rm -f "$OUT.tmp"; echo "cloudaeye_error=claim_rejected http=403 — the setup code was already used or expired; run /cloudaeye:init again"; exit 1;;
-     *)   rm -f "$OUT.tmp"; echo "cloudaeye_error=claim_failed http=$R_HTTP url=$CE_CLAIM_URL"; exit 1;;
-   esac
-   # Validate before it becomes the live file: a truncated or error body would
-   # otherwise replace working credentials with something that fails much later.
-   $PY -c "
-import json, os, sys
-tmp = sys.argv[1]
+   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+   # One quoted heredoc, one program. The delimiter is quoted, so the shell
+   # substitutes NOTHING inside: no nested quoting to get wrong, nothing for a
+   # $ or a backtick to do. An earlier version orchestrated five separate
+   # `python -c "..."` calls from shell and could not be reproduced verbatim —
+   # it came back with lines merged and died on an unmatched quote.
+   "$PY" - <<'CLOUDAEYE_INIT'
+import glob, json, os, re, subprocess, sys, urllib.error, urllib.request, webbrowser
+
+CODE = os.environ.get("CE_CODE", "").strip()
+CLAIM_URL = os.environ.get("CE_CLAIM_URL", "").strip()
+HOME = os.path.expanduser("~")
+
+
+def say(line):
+    print(line, flush=True)
+
+
+def load(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return {}
+
+
+# The plugin's own data directory: outside every git repository, so it cannot be
+# committed or shipped in a diff. CLAUDE_PLUGIN_DATA names it when Claude Code
+# exports it, which it does not do for every process kind - so fall back to
+# wherever a creds file already lives, then a cloudaeye* directory, then create
+# one. All are matched by the glob the review skills read, and they take the
+# newest file, so this write wins wherever it lands.
+data = os.environ.get("CLAUDE_PLUGIN_DATA") or ""
+if not data:
+    base = os.path.join(HOME, ".claude", "plugins", "data")
+    found = sorted(glob.glob(os.path.join(base, "*", "cloudaeye-creds.json")))
+    if found:
+        data = os.path.dirname(found[0])
+    else:
+        dirs = sorted(glob.glob(os.path.join(base, "cloudaeye*")))
+        data = dirs[0] if dirs else os.path.join(base, "cloudaeye")
+os.makedirs(data, exist_ok=True)
+creds_path = os.path.join(data, "cloudaeye-creds.json")
+
+# --- redeem, only when a code was supplied --------------------------------
+# The key is parsed and written inside this process: never a shell variable,
+# never an argument, never on a command line. Nothing here prints it.
+if CODE:
+    try:
+        request = urllib.request.Request(
+            CLAIM_URL,
+            data=json.dumps({"code": CODE}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            fetched = json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            say("cloudaeye_error=claim_rejected http=403 - that setup code was "
+                "already used or has expired; run /cloudaeye:init again")
+        else:
+            say("cloudaeye_error=claim_failed http=%d" % exc.code)
+        raise SystemExit(1)
+    except Exception as exc:
+        say("cloudaeye_error=claim_failed %s" % type(exc).__name__)
+        raise SystemExit(1)
+    # Validate before it becomes the live file: a truncated body must not
+    # replace working credentials with something that fails much later.
+    if not str(fetched.get("api_key", "")).strip() or not str(fetched.get("tenant_key", "")).strip():
+        say("cloudaeye_error=claim_incomplete")
+        raise SystemExit(1)
+    tmp = creds_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(fetched, handle)
+    try:
+        os.chmod(tmp, 0o600)          # no-op on Windows, matters elsewhere
+    except OSError:
+        pass
+    os.replace(tmp, creds_path)       # atomic: no torn read by a concurrent session
+    say("stored=" + creds_path)
+
+# --- resolve credentials exactly as the review skills do ------------------
+claude_json = load(os.path.join(HOME, ".claude.json"))
+
+
+def server_entry(document):
+    return ((document or {}).get("mcpServers") or {}).get("cloudaeye") or {}
+
+
+entry = server_entry((claude_json.get("projects") or {}).get(os.getcwd())) or server_entry(claude_json)
+headers = entry.get("headers") or {}
+env = os.environ.get
+pdata_files = glob.glob(os.path.join(HOME, ".claude", "plugins", "data", "*", "cloudaeye-creds.json"))
+newest = max(pdata_files, key=os.path.getmtime) if pdata_files else ""
+
+layers = [
+    ("env", {"api_key": env("CLOUDAEYE_API_KEY"), "tenant_key": env("CLOUDAEYE_TENANT_KEY"),
+             "user_name": env("CLOUDAEYE_USER_NAME"), "url": env("CLOUDAEYE_URL")}),
+    ("plugin", {field: env("CLAUDE_PLUGIN_OPTION_" + field.upper())
+                for field in ("api_key", "tenant_key", "user_name", "url")}),
+    ("pdata", load(newest)),
+    ("claude", {"api_key": headers.get("X-Product-API-Key"),
+                "tenant_key": headers.get("X-Tenant-Key"),
+                "user_name": headers.get("X-User-Name"),
+                "url": str(entry.get("url") or "").rstrip("/")}),
+]
+
+
+def resolve(field):
+    for name, layer in layers:
+        value = str((layer or {}).get(field) or "").strip()
+        if value:
+            return value, name
+    return "", "none"
+
+
+api_key, origin = resolve("api_key")
+if not re.fullmatch(r"[A-Za-z0-9._-]{8,128}", api_key or ""):
+    api_key, origin = "", "none"
+tenant_key = resolve("tenant_key")[0]
+user_name = resolve("user_name")[0]
+base_url = resolve("url")[0] or "https://api.cloudaeye.com/mcp"
+
+if not CODE and origin == "none":
+    # Expected on a first run: nothing is set up yet, so step 3 fetches a code.
+    say("setup=absent")
+    raise SystemExit(0)
+
+# The key travels in a header, so anything off-box must be https or it crosses
+# the network in clear. Localhost has no hop to sniff.
+if not re.match(r"^(https://|http://localhost|http://127\.0\.0\.1)", base_url):
+    say("cloudaeye_error=insecure_url url=%s auth_from=%s" % (base_url, origin))
+    raise SystemExit(1)
+
+# Reported separately from auth_from: a higher layer (an exported key, or one in
+# the plugin's settings) shadows the file just written, so the session below can
+# succeed on somebody else's credential and say nothing about whether THIS run
+# worked. That is the one way "setup complete" could be a lie.
+pdata_ok = "1" if str((load(newest) or {}).get("api_key") or "").strip() else "0"
+if pdata_ok != "1":
+    say("cloudaeye_error=not_readable_back url=%s" % base_url)
+    raise SystemExit(1)
+
+
+# --- prove it, by opening a real review session ---------------------------
+def git(*args):
+    try:
+        return subprocess.run(("git",) + args, capture_output=True, text=True,
+                              timeout=15).stdout.strip()
+    except Exception:
+        return ""
+
+
+if not git("rev-parse", "--show-toplevel"):
+    say("verify=skipped reason=not_a_git_repo auth_from=%s" % origin)
+    raise SystemExit(0)
+
+remote = git("config", "--get", "remote.origin.url")
+repo = re.sub(r"\.git$", "", remote.rsplit("/", 1)[-1]) if remote else os.path.basename(os.getcwd())
+payload = {"repo": repo, "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+           "head": git("rev-parse", "HEAD"), "language": "",
+           "tenant_key": tenant_key, "user_name": user_name}
+
+session = {}
 try:
-    cfg = json.load(open(tmp, encoding='utf-8'))
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/session",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "X-Product-API-Key": api_key},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        status = response.status
+        session = json.load(response)
+except urllib.error.HTTPError as exc:
+    status = exc.code
 except Exception:
-    print('cloudaeye_error=claim_unreadable'); sys.exit(1)
-if not str(cfg.get('api_key', '')).strip() or not str(cfg.get('tenant_key', '')).strip():
-    print('cloudaeye_error=claim_incomplete'); sys.exit(1)
-try:
-    os.chmod(tmp, 0o600)          # no-op on Windows, matters everywhere else
-except OSError:
-    pass
-os.replace(tmp, sys.argv[2])      # atomic: a concurrent session never reads a torn file
-print('stored=' + sys.argv[2])
-" "$OUT.tmp" "$OUT" || { rm -f "$OUT.tmp"; exit 1; }
-   fi
-   # The key is out of this shell from here on. Everything below resolves it the way
-   # the review skills do, through the file just written — so "setup complete" means
-   # the path they actually use works, not that a file exists.
-   unset CE_KEY CE_TENANT CE_USER CE_URL
-   git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "verify=skipped reason=not_a_git_repo"; exit 0; }
-   cd "$(git rev-parse --show-toplevel)" || exit 1
-   mkdir -p .cloudaeye/session && printf '*\n' > .cloudaeye/.gitignore
-   CE_TMP=$(mktemp -d 2>/dev/null) || CE_TMP="${TMPDIR:-${TMP:-/tmp}}/cloudaeye-$$"
-   mkdir -p "$CE_TMP" || { echo "cloudaeye_error=bad_config"; exit 1; }
-   trap 'rm -rf "$CE_TMP"' EXIT INT TERM
-   REPO=$(basename -s .git "$(git config --get remote.origin.url)"); [ -n "$REPO" ] || REPO=$(basename "$PWD")
-   $PY -c "import glob,json,os,re,sys;L=lambda p:(json.load(open(p,encoding='utf-8')) if p and os.path.exists(p) else {});H=os.path.expanduser('~');C=L(os.path.join(H,'.claude.json'));M=lambda d:((d or {}).get('mcpServers') or {}).get('cloudaeye') or {};S=M((C.get('projects') or {}).get(os.getcwd())) or M(C);D=S.get('headers') or {};E=os.environ.get;PO=lambda f:E('CLAUDE_PLUGIN_OPTION_'+f.upper());GL=glob.glob(os.path.join(H,'.claude','plugins','data','*','cloudaeye-creds.json'));G=max(GL,key=os.path.getmtime) if GL else '';LAY=[('env',{'api_key':E('CLOUDAEYE_API_KEY'),'tenant_key':E('CLOUDAEYE_TENANT_KEY'),'user_name':E('CLOUDAEYE_USER_NAME'),'url':E('CLOUDAEYE_URL')}),('plugin',{'api_key':PO('api_key'),'tenant_key':PO('tenant_key'),'user_name':PO('user_name'),'url':PO('url')}),('pdata',L(G)),('claude',{'api_key':D.get('X-Product-API-Key'),'tenant_key':D.get('X-Tenant-Key'),'user_name':D.get('X-User-Name'),'url':str(S.get('url') or '').rstrip('/')})];P=lambda f:next(((str(l.get(f) or '').strip(),n) for n,l in LAY if str(l.get(f) or '').strip()),('','none'));k,o=P('api_key');k=k if re.fullmatch(r'[A-Za-z0-9._-]{8,128}',k) else '';W=lambda n,b:open(os.path.join(sys.argv[4],n),'wb').write(b);json.dump({'repo':sys.argv[1],'branch':sys.argv[2],'head':sys.argv[3],'language':'','tenant_key':P('tenant_key')[0],'user_name':P('user_name')[0]},open('.cloudaeye/session/req.json','w'));W('curl.cfg',('header = \"X-Product-API-Key: %s\"\n' % k).encode() if k else b'');W('base_url',(P('url')[0] or 'https://api.cloudaeye.com/mcp').encode());W('origin',(o if k else 'none').encode());W('pdata_ok',b'1' if str((L(G) or {}).get('api_key') or '').strip() else b'0')" "$REPO" "$(git rev-parse --abbrev-ref HEAD)" "$(git rev-parse HEAD)" "$CE_TMP"
-   CE=$(cat "$CE_TMP/base_url" | tr -d '\r\n'); ORIGIN=$(cat "$CE_TMP/origin" | tr -d '\r\n')
-   # Reported separately from auth_from on purpose. A higher layer (an exported
-   # CLOUDAEYE_API_KEY, or a key in the plugin's settings) shadows the file just
-   # written, so the session below can succeed on somebody else's credential and
-   # say nothing about whether this run actually worked. That is the one way
-   # "setup complete" could be a lie.
-   PDATA_OK=$(cat "$CE_TMP/pdata_ok" | tr -d '\r\n')
-   case "$CE" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "cloudaeye_error=insecure_url url=$CE auth_from=$ORIGIN"; exit 1;; esac
-   # No code was given and nothing resolved: this machine is not set up yet, which
-   # on the first pass is the expected answer, not an error.
-   if [ -z "$CE_CODE" ] && [ "$ORIGIN" = "none" ]; then echo "setup=absent"; exit 0; fi
-   [ "$PDATA_OK" = "1" ] || { echo "cloudaeye_error=not_readable_back url=$CE"; exit 1; }
-   rm -f .cloudaeye/session/session.json
-   S_HTTP=$(curl -s -m 30 -K "$CE_TMP/curl.cfg" -o .cloudaeye/session/session.json -w '%{http_code}' \
-     -X POST "$CE/session" -H 'Content-Type: application/json' -d @.cloudaeye/session/req.json)
-   echo "verify_http=$S_HTTP stored_resolves=$PDATA_OK auth_from=$ORIGIN url=$CE"
-   # Is THIS repository connected? The server answers it on every session, and
-   # supplies the link — the client never builds a CloudAEye URL of its own.
-   INTEG=$($PY -c "
-import json, sys
-try:
-    d = json.load(open('.cloudaeye/session/session.json', encoding='utf-8'))
-except Exception:
-    sys.exit(0)
-if d.get('target_branch_error'):
-    print('no ' + (d.get('integration_url') or ''))
-elif d.get('target_branch'):
-    print('yes ' + d['target_branch'])
-" 2>/dev/null)
-   set -- $INTEG
-   echo "integrated=${1:-unknown} ${2:+link=$2}"
-   # Open it, because the whole point of noticing is to get them there. The link
-   # is printed above regardless, so this is a convenience, never load-bearing —
-   # and browser_open= reports what actually happened rather than assuming.
-   #
-   # cmd.exe takes //c, not /c. Under MSYS a leading-slash argument is rewritten
-   # as a path, so `cmd.exe /c start ...` arrives as `cmd.exe C:/ start ...`:
-   # an interactive shell that opens nothing and then waits. That is both why no
-   # tab appeared and why an earlier synchronous version hung for two minutes.
-   #
-   # All three streams are redirected on every branch. A launched browser
-   # inherits this shell's stdout, and an inherited pipe is not closed when the
-   # block ends — whatever reads this output would wait on a browser window.
-   BROWSER_OPENED=no
-   if [ "${1:-}" = "no" ] && [ -n "${2:-}" ]; then
-     if   command -v open      >/dev/null 2>&1; then open "$2"     </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
-     elif command -v xdg-open  >/dev/null 2>&1; then xdg-open "$2" </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
-     elif command -v cmd.exe   >/dev/null 2>&1; then cmd.exe //c start "" "$2" </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
-     fi
-     echo "browser_open=$BROWSER_OPENED"
-   fi
-   cat .cloudaeye/session/session.json 2>/dev/null; echo
+    status = 0
+say("verify_http=%s stored_resolves=%s auth_from=%s url=%s" % (status, pdata_ok, origin, base_url))
+
+# --- is THIS repository connected? ----------------------------------------
+# The server answers it on every session and supplies the link; the client
+# never builds a CloudAEye URL of its own.
+link = ""
+if session.get("target_branch_error"):
+    state, link = "no", (session.get("integration_url") or "")
+elif session.get("target_branch"):
+    state = "yes"
+else:
+    state = "unknown"
+say("integrated=%s%s" % (state, (" link=" + link) if link else ""))
+
+if state == "no" and link:
+    # webbrowser handles every platform and sidesteps the MSYS trap where
+    # `cmd.exe /c ...` arrives as `cmd.exe C:/ ...` and opens nothing at all.
+    # browser_open reports what actually happened: whether a tab appeared is the
+    # one thing the calling agent cannot observe for itself.
+    try:
+        say("browser_open=%s" % ("yes" if webbrowser.open(link) else "no"))
+    except Exception:
+        say("browser_open=no")
+CLOUDAEYE_INIT
    ```
 
 3. **Only if `setup=absent`: call CloudAEye's `get_credentials` MCP tool.** It takes no arguments, on purpose:
