@@ -161,19 +161,24 @@ elif d.get('target_branch'):
    set -- $INTEG
    echo "integrated=${1:-unknown} ${2:+link=$2}"
    # Open it, because the whole point of noticing is to get them there. The link
-   # is printed above regardless, so this is a convenience and never load-bearing.
+   # is printed above regardless, so this is a convenience, never load-bearing —
+   # and browser_open= reports what actually happened rather than assuming.
    #
-   # Fully detached — every stream redirected AND backgrounded. A browser started
-   # from here inherits this shell's stdout, and an inherited pipe is not closed
-   # when the block finishes: whatever is reading the output then waits on a
-   # browser window instead of returning. That hangs the skill, which is a far
-   # worse outcome than not opening a tab, so failure is not even detected here.
+   # cmd.exe takes //c, not /c. Under MSYS a leading-slash argument is rewritten
+   # as a path, so `cmd.exe /c start ...` arrives as `cmd.exe C:/ start ...`:
+   # an interactive shell that opens nothing and then waits. That is both why no
+   # tab appeared and why an earlier synchronous version hung for two minutes.
+   #
+   # All three streams are redirected on every branch. A launched browser
+   # inherits this shell's stdout, and an inherited pipe is not closed when the
+   # block ends — whatever reads this output would wait on a browser window.
+   BROWSER_OPENED=no
    if [ "${1:-}" = "no" ] && [ -n "${2:-}" ]; then
-     if   command -v cmd.exe  >/dev/null 2>&1; then ( cmd.exe /c start "" "$2" </dev/null >/dev/null 2>&1 & ) 
-     elif command -v open     >/dev/null 2>&1; then ( open "$2"     </dev/null >/dev/null 2>&1 & )
-     elif command -v xdg-open >/dev/null 2>&1; then ( xdg-open "$2" </dev/null >/dev/null 2>&1 & )
-     else echo "browser_open=unavailable"
+     if   command -v open      >/dev/null 2>&1; then open "$2"     </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
+     elif command -v xdg-open  >/dev/null 2>&1; then xdg-open "$2" </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
+     elif command -v cmd.exe   >/dev/null 2>&1; then cmd.exe //c start "" "$2" </dev/null >/dev/null 2>&1 && BROWSER_OPENED=yes
      fi
+     echo "browser_open=$BROWSER_OPENED"
    fi
    cat .cloudaeye/session/session.json 2>/dev/null; echo
    ```
@@ -231,8 +236,9 @@ elif d.get('target_branch'):
    | `verify_http=` anything else | The server did not answer. Credentials are stored; the review server may be down. Retrying later is reasonable. |
    | `setup=absent` | No credentials on this machine — this is step 2 telling you to go to step 3, not an error. |
    | `integrated=yes` | This repository is connected: reviews get the real baseline and the code-context graph. Nothing to say beyond confirming it. |
-   | `integrated=no link=<url>` | The tenant is fine but **this repository is not connected**. A browser has already been opened at that link — say so, and say what it is for: installing the CloudAEye GitHub App and selecting this repository. Reviews still work meanwhile, against local `HEAD`, with no baseline branch and no code graph, so this is a "worth doing" not a "must do first". |
-   | `browser_open=failed` | Headless or no handler. Give them the link to open themselves; nothing else is wrong. |
+   | `integrated=no link=<url>` | The tenant is fine but **this repository is not connected**. Give them the link and say what it is for: installing the CloudAEye GitHub App and selecting this repository. Reviews still work meanwhile, against local `HEAD`, with no baseline branch and no code graph, so this is "worth doing", not "must do first". |
+   | `browser_open=yes` | A tab was opened at that link. Only say a browser opened if you see this line — **it is the one fact you cannot infer.** Claiming a tab opened when none did sends the user looking for a window that is not there. |
+   | `browser_open=no` | No handler, or the launch failed. Say nothing about browsers; just give them the link to open themselves. Nothing else is wrong. |
    | `integrated=unknown` | The session response had neither field — usually an older server. Ignore it rather than guessing. |
 
    Then tell them what they can run — **all six, with a few words each on when**.
