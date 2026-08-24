@@ -77,7 +77,7 @@ With no argument, fall back to asking the user (step 2).
    | `session_id=…` | Pass it to the MCP tool. |
    | `diff_bytes=0` | Nothing pending — report "nothing to check — no pending changes" and stop. |
    | `base_source=fork_point` | Correct baseline: the fork point off the integrated branch, not its tip. Name the branch and `base_age`; a very old baseline may miss newer merged work. |
-   | `base_source=head` | Degraded: only working-tree edits are in the diff. Say so, and pass on `target_branch_error` from `start_session`. |
+   | `base_source=head` | Degraded: only working-tree edits are in the diff. Say so. If `start_session` returned `setup_required`, report its `reason` and `remedy` verbatim — that is the actionable form. Do **not** quote `target_branch_error`: it names an internal record ("no datastore credentials for tenant 99") and tells the user nothing they can act on. |
    | `upload_http=` not `200` | The diff never reached the server. Stop; otherwise a stale result can look clean. |
    | `prior_task` | Offer it for reuse in step 2; never reuse it silently. |
 
