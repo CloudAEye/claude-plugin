@@ -90,6 +90,7 @@ What it adds over you doing it directly is **blast radius**. You can see the dif
    - **`needs_clarification`** — the request was ambiguous and **nothing was planned**. Ask the user which finding they meant, using the candidates in the message, and stop. Do not pick one yourself: a wrong guess edits the wrong code with the user's apparent blessing.
    - **`plans` empty with `unresolved`** — the request did not match any finding. Show `available_tags` and ask.
    - **Otherwise, show `resolved` first** — one line per finding: which one the request was read as naming, and the constraint attached. The user needs to see the reading before the edits, not after.
+   - **`note`** — present when the code has changed since the review that produced these findings, which is the normal case once you have fixed one thing and come back for the next. Say it in one line before you start editing. Every plan was checked against the current source; this is what makes an *unmarked* plan mean something rather than nothing.
    - A plan marked **`stale`** points at code that has moved since the review. Say so and ask before applying it; it may already be fixed.
    - A plan with **`risk: not_an_edit`** cannot be fixed by changing code — a leaked credential needs rotating and revoking. Report the remedy; do not write a code change that pretends to fix it.
 4. Apply the plans, and only the plans.
