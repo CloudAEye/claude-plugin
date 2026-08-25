@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cloudaeye",
   "displayName": "CloudAEye",
-  "version": "0.6.1",
-  "description": "Pre-commit code review, security scan, and task verification.",
+  "version": "0.7.0",
+  "description": "Pre-commit code review, security scan, task verification, and fix planning.",
   "author": {
     "name": "CloudAEye",
     "email": "support@cloudaeye.com",
