@@ -2,7 +2,7 @@
 name: implement
 description: Plan a fix for findings a CloudAEye review already produced. You say which ones in your own words — "fix the 2nd point, and use a context manager" — and the server returns a fix plan grounded in the repository's code graph, including the call sites and tests the change affects. It plans; it never edits on its own.
 when_to_use: Use after /cloudaeye:inspect, /cloudaeye:security or /cloudaeye:review has returned findings and the user wants help fixing some of them. Fixing a finding directly without this skill is also fine — this is for when the plan should account for the whole repository, not just the file being edited.
-argument-hint: "[which findings to fix, in your own words]"
+argument-hint: "[finding numbers like [1,3], or nothing for all of them]"
 allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__start_session", "mcp__cloudaeye__start_session", "mcp__plugin_cloudaeye_cloudaeye__implement", "mcp__cloudaeye__implement"]
 ---
 
@@ -79,8 +79,18 @@ What it adds over you doing it directly is **blast radius**. You can see the dif
    | `upload_http=` not `200` | The diff never reached the server. Stop; otherwise the plan is built against stale code. |
 2. Call CloudAEye's `implement` MCP tool with:
    - `session_id`: the `session_id` printed by step 1
-   - `request`: what the user said, **verbatim** — "fix the 2nd point, and use a context manager for it", "just the criticals", "fix them all". Do not summarise it, do not turn it into a list of tags, do not drop the part that sounds like a preference. Which findings they mean *and* any constraint on the fix both live in the phrasing, and a summary drops the constraint first. If the request came up in conversation rather than as an argument, quote it as they said it.
-   - `displayed_order`: the finding tags in the order **you printed them** to the user, e.g. `["src/db.py/issue-2", "src/api.py/issue-1"]`. This is what makes "the 2nd point" mean the second one on their screen. Omit it only if you never showed the list this session — never invent an order you did not print.
+   - `request`: what the user said, **verbatim**. Three forms, and you pass through whichever they used rather than converting between them:
+
+     | They said | You pass |
+     |---|---|
+     | `/cloudaeye:implement [1,3]` | `"[1,3]"` |
+     | `/cloudaeye:implement [1,3] use a context manager` | the whole string — the numbers select, the rest binds the plans |
+     | `/cloudaeye:implement` with no argument, or "fix them" | `""` — empty means every finding |
+     | "fix the 2nd point", "just the criticals" | the sentence as they said it |
+
+     Do not summarise it, do not expand a sentence into numbers yourself, and do not invent a list when they gave none. Which findings they mean *and* any constraint on the fix both live in the phrasing, and a summary drops the constraint first.
+
+   The numbers are the ones the review printed, which are the server's own — so it resolves them against its stored report exactly, with no interpretation. That is why you must never renumber a findings list when you print it.
 
    Call `mcp__plugin_cloudaeye_cloudaeye__implement`; it is pre-approved in this skill's frontmatter.
 
@@ -88,8 +98,9 @@ What it adds over you doing it directly is **blast radius**. You can see the dif
 3. Handle the response before touching any code.
    - **`error`** — report it as written. It means no findings are on record; the fix is to run a review first, which the message already says.
    - **`needs_clarification`** — the request was ambiguous and **nothing was planned**. Ask the user which finding they meant, using the candidates in the message, and stop. Do not pick one yourself: a wrong guess edits the wrong code with the user's apparent blessing.
-   - **`plans` empty with `unresolved`** — the request did not match any finding. Show `available_tags` and ask.
-   - **Otherwise, show `resolved` first** — one line per finding: which one the request was read as naming, and the constraint attached. The user needs to see the reading before the edits, not after.
+   - **`plans` empty with `unresolved`** — the request did not match any finding. Show `available_numbers` and ask.
+   - **An `error` naming a number that does not exist** — a typo in the list. Report it and stop; the message carries the valid range. Do not re-send a trimmed list on the user's behalf: they asked for something specific and got it wrong, and quietly doing less is worse than saying so.
+   - **Otherwise, show `resolved` first** — one line per finding, each with its `n`, so the user can see the numbers they gave map to the findings they meant. With an explicit list this is a confirmation; with free text it is the reading, and the reading is the part that can be wrong.
    - **`note`** — present when the code has changed since the review that produced these findings, which is the normal case once you have fixed one thing and come back for the next. Say it in one line before you start editing. Every plan was checked against the current source; this is what makes an *unmarked* plan mean something rather than nothing.
    - A plan marked **`stale`** points at code that has moved since the review. Say so and ask before applying it; it may already be fixed.
    - A plan with **`risk: not_an_edit`** cannot be fixed by changing code — a leaked credential needs rotating and revoking. Report the remedy; do not write a code change that pretends to fix it.
