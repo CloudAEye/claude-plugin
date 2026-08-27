@@ -6,6 +6,7 @@ Pre-commit code review, security scanning, change descriptions, questions, task 
 
 | Command | Purpose |
 |---|---|
+| `/cloudaeye:init` | Detect and initialize the current repository |
 | `/cloudaeye:inspect` | Bug-focused review without security prompts |
 | `/cloudaeye:security` | Application, LLM, agent, MCP, and secret security review |
 | `/cloudaeye:review` | Full bug and security review |
@@ -36,16 +37,16 @@ Claude Code stores and refreshes the OAuth credentials.
 
 ## Self-hosted Server
 
-The plugin uses `https://api.cloudaeye.com/mcp` by default. Set the plugin's **Review server URL** during installation to point at a self-hosted OAuth-enabled MCP endpoint.
+The plugin uses `https://api.cloudaeye.com/mcp` by default. Set `CLOUDAEYE_URL` before starting Claude Code to use a self-hosted OAuth-enabled MCP endpoint.
 
 ## Data Flow
 
 Each operational skill:
 
-1. Collects the repository name, branch, HEAD, and language.
-2. Calls the OAuth-authenticated `start_session` MCP tool.
-3. Builds the diff with `git diff` after `git add --intent-to-add .` so untracked files are included.
-4. Uploads the multipart diff to the returned URL using the session-scoped `X-Upload-Token`.
+1. Detects the provider, repository URL, current branch, and base branch.
+2. Calls the session-free `initialize_repository` tool; it opens setup only when the provider is not connected.
+3. Calls the OAuth-authenticated `start_session` tool after initialization.
+4. Builds and uploads the diff with `git diff` after `git add --intent-to-add .` so untracked files are included.
 5. Calls the requested MCP review tool with the returned session ID.
 
 The upload token is placed in a private temporary curl config, is not printed, and is deleted when the upload command exits. The `.cloudaeye/` scratch directory contains only gitignored session diff data. Previously stored credential files are neither read nor changed.
@@ -66,7 +67,7 @@ OAuth requires an interactive MCP client, so unattended CI and service-account s
 ## Layout
 
 ```text
-.claude-plugin/plugin.json   plugin manifest and self-hosted URL setting
+.claude-plugin/plugin.json   plugin manifest
 .mcp.json                    OAuth MCP server registration
 skills/<verb>/SKILL.md       operational commands
 ```

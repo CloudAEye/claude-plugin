@@ -3,7 +3,7 @@ name: review
 description: Full CloudAEye review — bugs and security in one pass — of the uncommitted changes in this repo, of just one file or directory of them, or of an open pull request given its number. Reports findings with file, line and severity, grouped by kind; it never edits code on its own. The widest and most expensive of the CloudAEye passes.
 when_to_use: Use before opening a significant PR, when the user asks for a full, complete or thorough review, when they name a path to review ("/cloudaeye:review src/auth/"), or when they name a pull request ("/cloudaeye:review #405", "review PR 12"). For the routine check after finishing a task use /cloudaeye:inspect; for the security surface alone use /cloudaeye:security.
 argument-hint: "[optional: a path, a PR number like #405, and/or --critical]"
-allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__start_session", "mcp__cloudaeye__start_session", "mcp__plugin_cloudaeye_cloudaeye__inspect_diff", "mcp__cloudaeye__inspect_diff"]
+allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__initialize_repository", "mcp__cloudaeye__initialize_repository","mcp__plugin_cloudaeye_cloudaeye__start_session", "mcp__cloudaeye__start_session", "mcp__plugin_cloudaeye_cloudaeye__inspect_diff", "mcp__cloudaeye__inspect_diff"]
 ---
 
 ## When to run
@@ -71,18 +71,66 @@ A pull request must be **open** (drafts are fine), must merge into this reposito
 
 ## Steps
 
-1. Prepare the review session.
+### Repository initialization gate
 
-   First collect the local repository identity with one Bash call. **All three modes need this** — the repository name comes from the git remote whichever way you are reviewing.
+Before creating a session, run the bundled preflight helper and call the
+session-free initialization tool. This is required before every operational command.
+
+```bash
+   for c in python python3 py; do command -v "$c" >/dev/null 2>&1 && "$c" -c "" 2>/dev/null && { PY=$c; break; }; done
+   [ -n "$PY" ] || { echo "cloudaeye_error=python_not_found"; exit 1; }
+   META=$("$PY" "${CLAUDE_PLUGIN_ROOT}/scripts/repository_preflight.py") || { printf '%s\n' "$META"; exit 1; }
+printf '%s\n' "$META"
+```
+
+Call `mcp__plugin_cloudaeye_cloudaeye__initialize_repository` with the detected
+`provider`, `repo_url`, and an empty `monitor_branch`, and keep its response as
+`INIT`. If it returns `branch_required`, ask `Branch to monitor [base_branch]:`;
+Enter keeps the displayed base branch. Set `BRANCH` to that answer (or the
+displayed base branch); if there is no base branch, require a non-empty answer.
+Rerun the helper with `--branch "$BRANCH"`, set
+`MONITOR_BRANCH` from that helper result, and call initialization again with
+`monitor_branch=MONITOR_BRANCH`. Keep the same `MONITOR_BRANCH` for every retry.
+
+If initialization returns `setup_required`, validate and open `integration_url`
+below, then poll every 10 seconds for at most 30 attempts. Each poll must call
+initialization with the original `provider` and `repo_url` and the same
+`monitor_branch=MONITOR_BRANCH`; replace `INIT` with each response. Continue
+only after `INIT.status` is `ready` or `initialized`; stop on errors, conflicts,
+or timeout. Never treat `provider_connected` alone as success.
+
+When `INIT.status` is `ready` or `initialized`, use `INIT.repo_full` as the
+authoritative `repo` for `start_session`. Do not recompute it from local Git.
+
+```bash
+LINK='<integration_url from the tool>'
+case "$LINK" in
+  https://*|http://localhost/*|http://localhost:*|http://127.0.0.1/*|http://127.0.0.1:*) ;;
+  *) echo "cloudaeye_error=insecure_integration_url"; exit 1 ;;
+esac
+if command -v open >/dev/null 2>&1; then open "$LINK"
+elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$LINK"
+elif command -v powershell.exe >/dev/null 2>&1; then
+  CE_LINK="$LINK" powershell.exe -NoProfile -Command 'Start-Process -LiteralPath $env:CE_LINK'
+elif command -v cmd.exe >/dev/null 2>&1; then cmd.exe /c start "" "$LINK"
+else printf 'quick_link=%s\n' "$LINK"
+fi
+```
+
+Do not start a session until this gate reports `ready` or `initialized`.
+
+
+1. Prepare and upload the review session.
+
+   First collect the current local branch and HEAD with one Bash call.
 
    ```bash
    cd "$(git rev-parse --show-toplevel)" || exit 1
    for c in python python3 py; do command -v "$c" >/dev/null 2>&1 && "$c" -c "" 2>/dev/null && { PY=$c; break; }; done
    [ -n "$PY" ] || { echo "cloudaeye_error=python_not_found"; exit 1; }
    mkdir -p .cloudaeye/session && printf '*\n' > .cloudaeye/.gitignore
-   REPO=$(basename -s .git "$(git config --get remote.origin.url)"); [ -n "$REPO" ] || REPO=$(basename "$PWD")
    BRANCH=$(git rev-parse --abbrev-ref HEAD); HEAD_SHA=$(git rev-parse HEAD)
-   "$PY" -c "import json,sys;print(json.dumps(dict(repo=sys.argv[1],branch=sys.argv[2],head=sys.argv[3])))" "$REPO" "$BRANCH" "$HEAD_SHA"
+   "$PY" -c "import json,sys;print(json.dumps(dict(branch=sys.argv[1],head=sys.argv[2])))" "$BRANCH" "$HEAD_SHA"
    ```
 
    Call `mcp__plugin_cloudaeye_cloudaeye__start_session` with those three values — no `language`; the server derives the tech-stack hint from the diff, which describes the change rather than the repo around it. If the tool is unavailable, stop and tell the user to authenticate CloudAEye through `/mcp`.

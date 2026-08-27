@@ -12,7 +12,7 @@
   "homepage": "https://docs.cloudaeye.com/claude-code",
   "repository": "https://github.com/CloudAEye/claude-plugin",
   "keywords": ["code-review", "security", "pre-commit", "ai"],
-  "userConfig": {
+    "userConfig": {
     "url": {
       "type": "string",
       "title": "Review server URL",
