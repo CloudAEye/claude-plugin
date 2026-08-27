@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cloudaeye",
   "displayName": "CloudAEye",
-  "version": "0.6.1",
+  "version": "0.6.5",
   "description": "Pre-commit code review, security scan, and task verification.",
   "author": {
     "name": "CloudAEye",
@@ -12,7 +12,7 @@
   "homepage": "https://docs.cloudaeye.com/claude-code",
   "repository": "https://github.com/CloudAEye/claude-plugin",
   "keywords": ["code-review", "security", "pre-commit", "ai"],
-  "userConfig": {
+    "userConfig": {
     "url": {
       "type": "string",
       "title": "Review server URL",
