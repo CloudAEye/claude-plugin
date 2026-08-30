@@ -1,6 +1,6 @@
 # CloudAEye for Claude Code
 
-Pre-commit code review, security scanning, change descriptions, questions, task verification, and fix planning for Claude Code.
+Pre-commit code review, security scanning, change descriptions, questions, task verification, pull-request hygiene checks, and fix planning for Claude Code.
 
 ## Commands
 
@@ -13,6 +13,7 @@ Pre-commit code review, security scanning, change descriptions, questions, task 
 | `/cloudaeye:describe` | Describe the pending change |
 | `/cloudaeye:ask` | Ask a question about the pending change |
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
+| `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
 | `/cloudaeye:implement` | Plan a fix for findings a review already produced |
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
