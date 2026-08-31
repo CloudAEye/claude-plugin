@@ -116,39 +116,65 @@ Do not proceed until this gate reports `ready` or `initialized`.
    | `error` with `setup_required` | The repository is not integrated. Report the `setup_required` guidance and stop. |
    | `error` otherwise | Report the `error` field and stop. |
 
-4. Report the result.
+4. Report the result — **a summary table and a link, not a transcript.**
+
+   The full report lives on the pull request: CloudAEye's bot posts it there
+   from the stored review, with every check's detail, the findings and the
+   generated description. What you print is the headline and the pointer to it.
 
    - **First: `verdict` is `error`.** The checklist never completed, so nothing
-     was checked. **Report it as a failed run and stop** — do not present the
-     rest of the response, and never call the pull request clean. `degraded`
-     says what failed. Re-running once the cause is fixed gives a real result.
-   - **`verdict`** — `approve` or `request_changes`. Say which, and say in one
-     line what it covers: hygiene for this repository's enabled checks, not
-     bugs and not security.
-   - **`checks`** — one line each: the `label`, its `status`, and what the
-     `markdown` says. Statuses mean different things and must not be flattened:
-     - `passed` — the check ran and is satisfied.
-     - `failed` — the check ran and found something to do. These are what
-       drives `request_changes`.
-     - `skipped` — the check is **not enabled** for this repository. Say that,
-       rather than listing it as if it had run.
-     - `error` — the check could **not** run. Report it as a gap in coverage.
-       It deliberately does not block the verdict, so it is the one status a
-       reader will otherwise mistake for a pass.
-   - **`findings`** — present when a review category rides in the checklist
-     (duplicate code is the usual one). Each carries its own `check`. List them
-     with file and location.
-   - **`stages`** — the secret scan, when it found something. Treat a secret
-     finding as urgent regardless of the rest of the result.
-   - **`degraded`** — a report that failed to complete. **Always report it.**
-     It turns "we found nothing" into "we could not look", and nothing else in
-     the output says so.
-   - **`pr_description`** — the description CloudAEye generated while running
-     the checks. Offer it only if the user asks or if the `pr_desc` check
-     failed; otherwise it is noise.
+     was checked. **Report it as a failed run and stop** — do not print the
+     table, do not print the link as if there were a report at the other end,
+     and never call the pull request clean. `degraded` says what failed.
+     Re-running once the cause is fixed gives a real result.
+   - **One line: the `verdict` and the `summary` field**, as the server wrote
+     it — it already carries the counts (`3 of 6 checks passed`) and the
+     percentage of any failing coverage check, so pass it through rather than
+     recounting `checks` yourself. `approve` or `request_changes`, and say in the same breath what it
+     covers: hygiene for this repository's enabled checks, not bugs and not
+     security.
+   - **Then the table** — one row per entry in `checks`: its `label`, its
+     `status`, and its `metric`. Do **not** print each check's `markdown`; that
+     is the detail the bot posts on the pull request, and repeating it here is
+     the transcript this step exists to replace.
+
+     | Check | Status | Detail |
+     |---|---|---|
+     | Docstring coverage | failed | 57.1% (4/7 documented) |
+     | PR title | passed | |
+
+     `metric` is the check's own number — a coverage percentage and the ratio
+     behind it — or a short verdict for the checks that have no number, or an
+     empty string. **Print it exactly as given and leave the cell blank when it
+     is empty.** Do not compute a percentage of your own, do not turn a ratio
+     into one, and do not carry a number over from a previous run: a figure in
+     that column reads as measured.
+
+     The four statuses mean different things and must not be flattened:
+     `passed` ran and is satisfied; `failed` ran and found something to do, and
+     is what drives `request_changes`; `skipped` is **not enabled** for this
+     repository, so say that rather than listing it as if it had run; `error`
+     could **not** run — a gap in coverage, and the one status a reader will
+     otherwise mistake for a pass.
+   - **Then one pointer line**, using `pr_url` from the response:
+     `Full report: [<repo>#<pr_number>](<pr_url>)`, and say the CloudAEye bot
+     posts the complete details there. **Do not claim a comment exists.** You
+     did not post it and cannot see it — the wording is where the report goes,
+     not what is already on the page. If `pr_url` is absent, say the detail is
+     on the pull request and give no link.
+   - **`findings` and `stages`, as counts on their own line.** Say how many and
+     which check or stage they came from; the detail is on the pull request.
+     A secret finding is the exception — say so plainly and treat it as urgent
+     regardless of the rest of the result.
+   - **`degraded` — always report it, in full, after the table.** It turns "we
+     found nothing" into "we could not look", nothing else in the output says
+     so, and it is the one thing a short summary cannot be trusted to carry.
+   - **`pr_description`** — do not print it. It is part of what the bot posts
+     on the pull request. Offer it only if the user asks for it here.
 
    **Report what came back, not what didn't.** Do not enumerate checks that are
    absent from the response, and do not narrate timings or internal identifiers.
+
 
 ## Notes
 
