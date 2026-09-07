@@ -15,6 +15,7 @@ Pre-commit code review, security scanning, change descriptions, questions, task 
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
 | `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
 | `/cloudaeye:implement` | Plan a fix for findings a review already produced |
+| `/cloudaeye:slop-score` | Score a change for AI-slop signals, with the evidence behind the number |
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
 
