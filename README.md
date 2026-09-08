@@ -1,6 +1,6 @@
 # CloudAEye for Claude Code
 
-Pre-commit code review, security scanning, change descriptions, questions, task verification, pull-request hygiene checks, and fix planning for Claude Code.
+Pre-commit code review, security scanning, AI-slop scoring, change descriptions, questions, task verification, pull-request hygiene checks, docstring and unit-test generation, issue explanation, tracking-issue creation, and fix planning for Claude Code.
 
 ## Commands
 
@@ -15,9 +15,15 @@ Pre-commit code review, security scanning, change descriptions, questions, task 
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
 | `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
 | `/cloudaeye:implement` | Plan a fix for findings a review already produced |
-| `/cloudaeye:slop-score` | Score a change for AI-slop signals, with the evidence behind the number |
+| `/cloudaeye:slop-score` | Score a change for AI-slop signals, with the evidence behind every point |
+| `/cloudaeye:add-docs` | Write docstrings for an open pull request and post them there as suggestions |
+| `/cloudaeye:add-tests` | Write unit tests for an open pull request and post them there as suggestions |
+| `/cloudaeye:explain` | Explain a Jira or GitHub issue against the code it touches |
+| `/cloudaeye:create-issue` | File findings from a review as Jira tickets or GitHub issues |
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
+
+Three commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, and `/cloudaeye:create-issue` opens real tickets.
 
 ## Install
 
