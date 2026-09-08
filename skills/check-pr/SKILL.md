@@ -118,9 +118,14 @@ Do not proceed until this gate reports `ready` or `initialized`.
 
 4. Report the result — **a summary table and a link, not a transcript.**
 
-   The full report lives on the pull request: CloudAEye's bot posts it there
-   from the stored review, with every check's detail, the findings and the
-   generated description. What you print is the headline and the pointer to it.
+   The full report goes onto the pull request itself — CloudAEye posts it there
+   when the review finishes, with every check's detail, the findings and the
+   generated description. **None of that is in the response**, deliberately:
+   what comes back is a verdict, one summary line, a row per check, and counts.
+   Print those and point at the pull request. Do not apologise for the missing
+   detail or offer to fetch it — there is nothing to fetch, and the link is the
+   answer. Whether it actually got there is in `posted`; step 4's last bullet
+   is where you use it.
 
    - **First: `verdict` is `error`.** The checklist never completed, so nothing
      was checked. **Report it as a failed run and stop** — do not print the
@@ -134,9 +139,8 @@ Do not proceed until this gate reports `ready` or `initialized`.
      covers: hygiene for this repository's enabled checks, not bugs and not
      security.
    - **Then the table** — one row per entry in `checks`: its `label`, its
-     `status`, and its `metric`. Do **not** print each check's `markdown`; that
-     is the detail the bot posts on the pull request, and repeating it here is
-     the transcript this step exists to replace.
+     `status`, and its `metric`. That is the whole row; the check's own report
+     is not in the response at all, by design. It is on the pull request.
 
      | Check | Status | Detail |
      |---|---|---|
@@ -156,21 +160,29 @@ Do not proceed until this gate reports `ready` or `initialized`.
      repository, so say that rather than listing it as if it had run; `error`
      could **not** run — a gap in coverage, and the one status a reader will
      otherwise mistake for a pass.
-   - **Then one pointer line**, using `pr_url` from the response:
-     `Full report: [<repo>#<pr_number>](<pr_url>)`, and say the CloudAEye bot
-     posts the complete details there. **Do not claim a comment exists.** You
-     did not post it and cannot see it — the wording is where the report goes,
-     not what is already on the page. If `pr_url` is absent, say the detail is
-     on the pull request and give no link.
-   - **`findings` and `stages`, as counts on their own line.** Say how many and
-     which check or stage they came from; the detail is on the pull request.
-     A secret finding is the exception — say so plainly and treat it as urgent
+   - **Then one pointer line, and `posted` decides what it says.** The server
+     asks the CloudAEye GitHub App to comment and reports back whether it
+     worked, so this is knowable rather than assumed — read `posted.status`
+     and do not soften or upgrade it:
+
+     | `posted.status` | the line to write |
+     |---|---|
+     | `ok` | `Full report: [<repo>#<pr_number>](<pr_url>)` — the complete checklist is on the pull request as a comment. |
+     | `partial` | Give the link, and say some of the detail could not be posted. `posted.errors` says what failed. |
+     | `failed` | Give the link, and say the checklist **could not be posted** — the table you just printed is all there is. Do not send the user to the pull request for detail that is not there. |
+     | `unavailable` | Say the CloudAEye GitHub App is not installed on this repository, so nothing was posted and the table above is the whole result. `posted.note` carries the reason. Give the link only as the pull request itself, never as a pointer to a report. |
+
+     If `posted` is absent entirely, fall back to naming the pull request as
+     where the report goes and claim nothing about a comment existing. If
+     `pr_url` is absent, give no link.
+   - **`counts.findings` and `stages`, as counts on their own line.** Both
+     arrive as numbers, never as bodies — the findings themselves are on the
+     pull request. Say how many and which stage they came from. A `SECRET_SCAN`
+     count above zero is the exception: say so plainly and treat it as urgent
      regardless of the rest of the result.
    - **`degraded` — always report it, in full, after the table.** It turns "we
      found nothing" into "we could not look", nothing else in the output says
      so, and it is the one thing a short summary cannot be trusted to carry.
-   - **`pr_description`** — do not print it. It is part of what the bot posts
-     on the pull request. Offer it only if the user asks for it here.
 
    **Report what came back, not what didn't.** Do not enumerate checks that are
    absent from the response, and do not narrate timings or internal identifiers.

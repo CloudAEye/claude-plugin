@@ -102,7 +102,7 @@ Do not proceed until this gate reports `ready` or `initialized`.
    | `status` | what to do |
    |---|---|
    | `ok` | Report it — step 5. |
-   | `pending` | Still generating. Say so, then call the tool again passing the `job_id` it returned, plus the same `repo` and `pr_number`. **Never start a second run** — it would post a second set of suggestions on the same pull request. Do this at most three times, then report that it is still running, and give the user the `job_id` to resume with. Whatever finishes is posted on the pull request either way. |
+   | `pending` | Still generating. Say so, then call the tool again passing the `job_id` it returned, plus the same `repo` and `pr_number`. **Never start a second run** — it would post a second set of suggestions on the same pull request. Do this at most three times, then report that it is still running, and give the user the `job_id` to resume with — **and say that nothing is on the pull request until a call finishes**, because the suggestions are posted by the call that sees the job complete, not by the job itself. A run left at `pending` and never resumed generates suggestions nobody ever sees. |
    | `error` with `pr_ineligible` | The eligibility refusal — closed or merged PR, wrong base branch, a fork, or over the 50-file limit. Print the `error` field **as written** and stop; each names a different thing to do. |
    | `error` with `setup_required` | The repository is not integrated. Report the `setup_required` guidance and stop. |
    | `error` otherwise | The generation job failed and nothing was posted. Report the `error` field as written. Re-running is reasonable once the cause is known; do not re-run reflexively. |
@@ -119,11 +119,28 @@ Do not proceed until this gate reports `ready` or `initialized`.
      |---|---|---|
      | `src/worker.py` | 4 | |
 
-   - **One pointer line**, using `pr_url`: `Suggestions: [<repo>#<pr_number>](<pr_url>)`,
-     and say CloudAEye posted them there as review suggestions the user can apply
-     with one click. Do not claim a specific number is visible on the page — the
-     count is of what was generated, and posting each one is the service's job,
-     not something this command can see.
+   - **`posted` — how many actually reached the pull request.** `summary` and
+     `counts` are what CloudAEye *generated*; `posted.comments` is what landed.
+     They are different numbers and must not be merged into one. Read
+     `posted.status` and do not soften or upgrade it:
+
+     | `posted.status` | the line to write |
+     |---|---|
+     | `ok` | `Suggestions: [<repo>#<pr_number>](<pr_url>)` — say they are on the pull request as review suggestions the user applies with one click. |
+     | `partial` | Give the link, then say how many of the generated total reached it. `posted.errors` says why the rest did not. Do not round it up to the generated count. |
+     | `failed` | Say **nothing reached the pull request** and give the reason from `posted.errors`. The generated count is not a result the user can use. Do not send them to look. |
+     | `unavailable` | Say the CloudAEye GitHub App is not installed on this repository, so nothing was posted. `posted.note` carries the reason. |
+
+     **`posted.fallbacks`, when present** — that many went up as plain comments
+     rather than applyable suggestions, because their line is outside the pull
+     request's diff. The text is there; the one-click apply button is not. Say
+     so in a clause, once: a user who expects a button and finds a comment will
+     otherwise think it failed. This is ordinary — the generators propose for
+     undocumented code in changed *files*, and GitHub only accepts suggestions
+     on changed *lines*.
+
+     If `posted` is absent, name the pull request as where the suggestions go
+     and claim no number is visible there.
    - **`unattached`**, when present: that many suggestions came back without a
      file attached. Mention it; it explains a count that does not add up.
    - **No suggestions is an ordinary answer, and it does not mean the code is tested.** It means CloudAEye found nothing in the change that a new test would cover. Say exactly that — the two readings point in opposite directions.

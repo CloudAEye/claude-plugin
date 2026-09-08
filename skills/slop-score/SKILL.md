@@ -223,7 +223,7 @@ Do not start a session until this gate reports `ready` or `initialized`.
 
 ## Notes
 
-- **The score is arithmetic; only the band is judged.** Every point traces to a finding with a file and a line, which is why the card can be argued with. If the user disputes a row, look at the evidence under it rather than defending the number. The one model judgment is the band, it can move by one step at most, and its reason is printed — so that is also arguable rather than an oracle.
+- **The score is arithmetic; only the band is judged.** Every point traces to a finding with a file and a line, which is why the card can be argued with. If the user disputes a row, look at the evidence under it rather than defending the row. The one model judgment is the band, it can move by one step at most, and its reason is printed — so that is also arguable rather than an oracle.
 - **A low score is not an approval.** These nine signals are about the shape of a change, not its correctness — a change can be perfectly clean here and still be wrong. For bugs run `/cloudaeye:inspect`, and for the security surface `/cloudaeye:security`. Say this when the user reads a low score as "good to merge".
 - **Volume is context, not a signal.** The headline reports lines, files and how many changed functions carry a real behavioural edit. "1,200 lines, 65 files, two behavioural changes" is the shape the whole feature exists to make visible, and it contributes no points on purpose — a big change is not a bad one.
 - **Commit shape is reported absent, never clean.** A session carries no commit list, so the "one enormous commit, generic message" signal cannot be measured here and says so rather than passing.
