@@ -11,6 +11,7 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 | `/cloudaeye:security` | Application, LLM, agent, MCP, and secret security review |
 | `/cloudaeye:review` | Full bug and security review |
 | `/cloudaeye:describe` | Describe the pending change |
+| `/cloudaeye:control-flow` | Draw what the change did to the flow of control, as a sequence diagram |
 | `/cloudaeye:ask` | Ask a question about the pending change |
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
 | `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
