@@ -56,6 +56,15 @@ fi
 Do not start a session until this gate reports `ready` or `initialized`.
 
 
+### Two ways in
+
+**With a pull-request number** — `/cloudaeye:control-flow 412` — skip step 1
+entirely. Call `start_session` with `INIT.repo_full`, the current `branch` and
+`head`, **and `pr_number`**; the server fetches that pull request and its diff
+itself, so there is nothing to upload. Then go to step 2.
+
+**With no argument**, the diff is the working tree and step 1 applies.
+
 1. Prepare and upload the review session.
 
    First collect the current local branch and HEAD with one Bash call.
@@ -131,8 +140,17 @@ Do not start a session until this gate reports `ready` or `initialized`.
    - `cross_repo`: omit. It searches the tenant's other connected repositories
      for callers this change may break, which is the most consequential thing
      the tool can find. Pass `false` only if the user asks to skip it.
+   - `post`: omit unless the user asked for the card to go on the pull request.
+     **It writes where other people can see it** — see the confirmation rule
+     below — and it needs a session opened with a `pr_number`.
    - `context`: omit unless the user scoped the run to a directory, in which
      case pass `{"scope_path": "<path>"}`.
+
+   **Confirm before passing `post: true`.** Say in one line what will happen —
+   CloudAEye will post the control-flow card as a comment on pull request
+   #<n> — and run it only on a clear yes. Do not confirm on their behalf
+   because they named a PR in the argument: asking for a diagram of a pull
+   request is not asking to comment on it.
 
    Call `mcp__plugin_cloudaeye_cloudaeye__control_flow`; it is pre-approved in
    this skill's frontmatter.
@@ -195,6 +213,7 @@ Do not start a session until this gate reports `ready` or `initialized`.
    | `cross_repo.affected` | Callers in other repositories this change may break. Say how many and in how many repositories. |
    | `cross_repo.unmeasured` | The cross-repository search **could not run**. This is not "no callers found" — say the search did not happen and why. |
    | `cross_repo.not_indexed` | Some connected repositories have no indexed graph, so they could not be searched. Say how many. The one that breaks may be among them. |
+   | `posted.status` | `ok` means the card is on the pull request and you may point them there. `unavailable` or `failed` means it is **not** — say so and say why. Never write "posted on the PR" without reading this field. |
    | `context_refresh.status` `skipped` or `failed` | The stored code graph was not refreshed with this diff, so the diagram may describe the pre-edit code. Say so in one line and quote `context_refresh.reason`. |
 
 ## Notes
@@ -210,8 +229,8 @@ Do not start a session until this gate reports `ready` or `initialized`.
 - **The arrows are not yours to add.** Every message was resolved from the
   symbol index. If you think one is missing, say so as an observation; do not
   edit it into the mermaid.
-- Pre-commit only for now: the diff is always `git diff` against the fork point.
-  Committing moves `HEAD`; the review session persists.
+- Two origins, one tool: a working-tree diff or a pull request the server
+  fetched. The diagram is identical either way — only `post` needs the second.
 - Without a refreshed code graph there are no resolved calls at all, and the
   tool returns `unavailable: no_code_graph` rather than a guess.
 - If `control_flow` is unavailable (MCP not connected), warn the user and skip —
