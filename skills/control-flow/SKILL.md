@@ -128,6 +128,9 @@ Do not start a session until this gate reports `ready` or `initialized`.
      further, and expect a busier diagram.
    - `label`: omit. Pass `false` only if the user asks for no model call at all;
      the diagram is identical either way, just titled with the raw symbol name.
+   - `cross_repo`: omit. It searches the tenant's other connected repositories
+     for callers this change may break, which is the most consequential thing
+     the tool can find. Pass `false` only if the user asks to skip it.
    - `context`: omit unless the user scoped the run to a directory, in which
      case pass `{"scope_path": "<path>"}`.
 
@@ -159,7 +162,19 @@ Do not start a session until this gate reports `ready` or `initialized`.
    A change that only adds calls comes back with one diagram, which is the
    common case. `diagrams` says which you got.
 
-   Five fields change what you may say around it:
+   **The card may end with a `### Cross-repository reach` section**, when the
+   change deleted or re-signed something another connected repository calls, or
+   deleted or moved an endpoint one of them reaches over HTTP. It has its own
+   diagram and its own table. Two rules:
+
+   - **It is a claim about a different codebase.** Never fold its counts into
+     the flow's own — "2 unresolved" is about the repository being changed, and
+     the reach table is about others.
+   - **Lead with it when it is there.** A caller in another repository that this
+     change breaks is the most consequential thing on the card, and the reason
+     is that nothing else in a review would ever surface it.
+
+   Seven fields change what you may say around the card:
 
    | field | what to do with it |
    |---|---|
@@ -167,6 +182,9 @@ Do not start a session until this gate reports `ready` or `initialized`.
    | `diagrams: 2` | The card holds a Before and an After. Print both; describe them as two states. |
    | `diff_measured: false` | There was no pre-edit graph to compare against, so **every marker was suppressed** and there is no Before picture. Say the diagram shows the current flow and that what changed in it could not be determined. Never report it as "nothing changed". |
    | `drawn: 0` | The change has no single flow. The card explains it. Do not pick a flow yourself. |
+   | `cross_repo.affected` | Callers in other repositories this change may break. Say how many and in how many repositories. |
+   | `cross_repo.unmeasured` | The cross-repository search **could not run**. This is not "no callers found" — say the search did not happen and why. |
+   | `cross_repo.not_indexed` | Some connected repositories have no indexed graph, so they could not be searched. Say how many. The one that breaks may be among them. |
    | `context_refresh.status` `skipped` or `failed` | The stored code graph was not refreshed with this diff, so the diagram may describe the pre-edit code. Say so in one line and quote `context_refresh.reason`. |
 
 ## Notes
