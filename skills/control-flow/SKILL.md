@@ -131,12 +131,23 @@ Do not start a session until this gate reports `ready` or `initialized`.
    - `cross_repo`: omit. It searches the tenant's other connected repositories
      for callers this change may break, which is the most consequential thing
      the tool can find. Pass `false` only if the user asks to skip it.
+   - `fmt`: omit for anything the user is going to **read here**. The default
+     is a plain-text sequence, which is what this terminal can actually show —
+     a mermaid fence renders here as its own source, sixteen lines of
+     `sequenceDiagram` and `participant` declarations before the first arrow.
+     Pass `"mermaid"` when the diagram is going somewhere that renders it: a
+     pull request or issue body, a GitHub comment, a file the user will view.
+     If they ask for "a diagram for the PR", that is `"mermaid"`.
    - `context`: omit unless the user scoped the run to a directory, in which
      case pass `{"scope_path": "<path>"}`.
 
    Call `mcp__plugin_cloudaeye_cloudaeye__control_flow`; it is pre-approved in
    this skill's frontmatter.
-3. Print the `card` field verbatim, **every mermaid fence included**. Then stop.
+3. Print the `card` field verbatim, **every fenced block included**. Then stop.
+
+   The diagram inside the fences is plain text by default, because that is what
+   a terminal can show. Do not "improve" it into mermaid, and do not redraw it
+   as ASCII art of your own — ask for `fmt: "mermaid"` instead and print that.
 
    The card is rendered server-side because the rules about what it may show
    are the feature, and each one is invisible once it is gone:
