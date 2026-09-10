@@ -58,10 +58,18 @@ Do not start a session until this gate reports `ready` or `initialized`.
 
 ### Two ways in
 
-**With a pull-request number** — `/cloudaeye:control-flow 412` — skip step 1
-entirely. Call `start_session` with `INIT.repo_full`, the current `branch` and
-`head`, **and `pr_number`**; the server fetches that pull request and its diff
-itself, so there is nothing to upload. Then go to step 2.
+**With a pull-request number** — `/cloudaeye:control-flow 412` or
+`/cloudaeye:control-flow #412`, the same convention `/cloudaeye:review` takes —
+skip step 1 entirely. Call `start_session` with `INIT.repo_full`, the current
+`branch` and `head`, **and `pr_number`** (the digits, with any `#` stripped);
+the server fetches that pull request and its diff itself, so there is nothing to
+upload. Then go to step 2.
+
+Nothing here asks the user for a GitHub credential, and nothing should: the
+server resolves the repository, its integrated branch and its App installation
+from the tenant record behind the caller's OAuth token. A run that cannot reach
+the repository is a server-side integration problem, reported as such — never a
+prompt for a key.
 
 **With no argument**, the diff is the working tree and step 1 applies.
 
@@ -176,19 +184,30 @@ itself, so there is nothing to upload. Then go to step 2.
    Reformatting the card, redrawing a diagram, "tidying" the participants or
    summarising the footer drops all three. Do not do any of them.
 
-   **The card may hold two diagrams**, under `### Before` and `### After`
-   headings, when the change removed or retargeted a call — a deleted call has
-   no position in the new code, so showing it on one diagram would mean
-   inventing one. When it does:
+   **The card holds two diagrams whenever the call sequence moved**, under
+   `### Before` and `### After` headings — additions included. Both pictures
+   declare the same participants in the same order, so the lifelines line up
+   vertically down the page and one collaborator can be tracked through both.
+   When it does:
 
    - print **both**, headings included. Dropping the Before block turns a
      before/after into a claim about the current code;
    - they are **two states, not one sequence**. Never describe the Before
      block's arrows as part of the After block's flow, and never number across
-     the two.
+     the two;
+   - a Before heading reading **"this symbol did not exist"** means the change
+     created it. The empty picture is the finding, not a rendering fault.
 
-   A change that only adds calls comes back with one diagram, which is the
-   common case. `diagrams` says which you got.
+   One diagram means one of two things and they are opposite: the flow's call
+   sequence is **unchanged** (the card says so in a sentence), or there was no
+   pre-edit graph to compare against (`diff_measured: false`). `diagrams` says
+   how many you got.
+
+   **The card opens with a small facts table** — why this flow was chosen, what
+   the call sequence did, how much of the change is *not* in the diagram, and
+   the cross-repository line. It renders even when there is no picture worth
+   drawing, and it is the part a reviewer acts on when the diagram is thin. Its
+   "Independent changes" row is the one number nothing else carries: print it.
 
    **The card may end with a `### Cross-repository reach` section**, when the
    change deleted or re-signed something another connected repository calls, or
@@ -202,7 +221,7 @@ itself, so there is nothing to upload. Then go to step 2.
      change breaks is the most consequential thing on the card, and the reason
      is that nothing else in a review would ever surface it.
 
-   Seven fields change what you may say around the card:
+   These fields change what you may say around the card:
 
    | field | what to do with it |
    |---|---|
@@ -213,6 +232,7 @@ itself, so there is nothing to upload. Then go to step 2.
    | `cross_repo.affected` | Callers in other repositories this change may break. Say how many and in how many repositories. |
    | `cross_repo.unmeasured` | The cross-repository search **could not run**. This is not "no callers found" — say the search did not happen and why. |
    | `cross_repo.not_indexed` | Some connected repositories have no indexed graph, so they could not be searched. Say how many. The one that breaks may be among them. |
+   | `pr_url` | The run was against a pull request. **End with a link to it** — `[<repo>#<pr_number>](<pr_url>)` — so the developer can open what was drawn. Absent on a working-tree run; give no link then, and never construct one yourself. |
    | `posted.status` | `ok` means the card is on the pull request and you may point them there. `unavailable` or `failed` means it is **not** — say so and say why. Never write "posted on the PR" without reading this field. |
    | `context_refresh.status` `skipped` or `failed` | The stored code graph was not refreshed with this diff, so the diagram may describe the pre-edit code. Say so in one line and quote `context_refresh.reason`. |
 
@@ -230,7 +250,8 @@ itself, so there is nothing to upload. Then go to step 2.
   symbol index. If you think one is missing, say so as an observation; do not
   edit it into the mermaid.
 - Two origins, one tool: a working-tree diff or a pull request the server
-  fetched. The diagram is identical either way — only `post` needs the second.
+  fetched. The diagram is identical either way; a pull-request run additionally
+  carries `pr_url` to link, and `post` needs that origin.
 - Without a refreshed code graph there are no resolved calls at all, and the
   tool returns `unavailable: no_code_graph` rather than a guess.
 - If `control_flow` is unavailable (MCP not connected), warn the user and skip —
