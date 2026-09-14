@@ -177,7 +177,10 @@ prompt for a key.
    The card is rendered server-side because the rules about what it may show
    are the feature, and each one is invisible once it is gone:
 
-   - the calls the code graph could not follow are **named**, with file and line;
+   - **every card opens with one line that begins "This code change …"** — print
+     it first and as written; it is the sentence a reviewer decides on;
+   - a call the code graph could not follow is a **dashed arrow to a named
+     receiver**, and the legend says so — there is no list of them to print;
    - the flows that were not drawn are **counted**;
    - the footer says the diagram is structure rather than a trace.
 
@@ -215,7 +218,7 @@ prompt for a key.
    diagram and its own table. Two rules:
 
    - **It is a claim about a different codebase.** Never fold its counts into
-     the flow's own — "2 unresolved" is about the repository being changed, and
+     the flow's own — the facts table is about the repository being changed, and
      the reach table is about others.
    - **Lead with it when it is there.** A caller in another repository that this
      change breaks is the most consequential thing on the card, and the reason
