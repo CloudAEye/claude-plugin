@@ -24,7 +24,39 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
 
-Three commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, and `/cloudaeye:create-issue` opens real tickets.
+Four commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, `/cloudaeye:control-flow` can post its card there when asked, and `/cloudaeye:create-issue` opens real tickets.
+
+## Typical workflows
+
+Every review command runs in one of two modes: with no argument it reviews your **uncommitted changes**, and with a pull-request number (`#412`) it reviews that **open pull request** — the server fetches the diff itself, so nothing is uploaded from your machine. The same command, the same output, two points in the cycle.
+
+### Before you commit
+
+```text
+/cloudaeye:inspect                  after each task — the cheap bug pass, no security prompts
+/cloudaeye:implement [1,3]          plan fixes for findings 1 and 3; Claude applies them
+/cloudaeye:inspect                  again, to confirm the fixes landed
+/cloudaeye:check-task BETA-5225     does the change do what the ticket asked?
+/cloudaeye:review                   bugs and security in one pass, before opening the PR
+/cloudaeye:describe                 the PR body
+```
+
+`/cloudaeye:control-flow` shows what the change did to the order of calls, and `/cloudaeye:slop-score` how much careful reading it needs — both useful before a PR on a change you did not write line by line.
+
+### After you push
+
+```text
+/cloudaeye:review #412              the full review, on the pull request
+/cloudaeye:control-flow #412        before/after diagrams, and who in other repositories calls what changed
+/cloudaeye:check-pr #412            the hygiene checklist — description, title, docs, tests, dependencies
+/cloudaeye:add-docs #412            docstrings, posted as suggestions on the pull request
+/cloudaeye:add-tests #412           unit tests, posted the same way
+/cloudaeye:create-issue [2] jira    file finding 2 as a Jira ticket (or `github`), optionally with an assignee
+```
+
+The pull request must be open, merge into your integrated branch, not come from a fork, and change at most 50 files. `/cloudaeye:implement` does not run on a pull request: its plans describe edits to a working tree.
+
+Full details of every command — what to pass, what comes back, and how to read it — are in the [User Guide](https://docs.cloudaeye.com/user-guide/mcp/usage-guide.html).
 
 ## Install
 
