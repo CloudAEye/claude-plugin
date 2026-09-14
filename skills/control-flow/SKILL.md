@@ -138,91 +138,57 @@ prompt for a key.
    | `upload_http=` not `200` | The diff never reached the server. Stop; otherwise a stale result can look clean. |
 
    **Which baseline applied must reach the user.** Every degradation still produces output that looks correct, so silence about it is the one failure mode that misleads. Keeping the clone current is the developer's job — the skill never forces a fetch, it just refuses to hide what it used.
-2. Call CloudAEye's `control_flow` MCP tool with:
-   - `session_id`: the `session_id` printed by step 1
-   - `depth`: omit. The default of 2 is the readable one — the changed symbol,
-     what it calls, and what those call. Pass 3 only if the user asks to see
-     further, and expect a busier diagram.
-   - `label`: omit. Pass `false` only if the user asks for no model call at all;
-     the diagram is identical either way, just titled with the raw symbol name.
-   - `cross_repo`: omit. It searches the tenant's other connected repositories
-     for callers this change may break, which is the most consequential thing
-     the tool can find. Pass `false` only if the user asks to skip it.
-   - `post`: omit unless the user asked for the card to go on the pull request.
-     **It writes where other people can see it** — see the confirmation rule
-     below — and it needs a session opened with a `pr_number`.
-   - `context`: omit unless the user scoped the run to a directory, in which
-     case pass `{"scope_path": "<path>"}`.
+2. Call `mcp__plugin_cloudaeye_cloudaeye__control_flow` (pre-approved in this
+   skill's frontmatter) with `session_id` from step 1. Leave `depth`, `label`
+   and `cross_repo` at their defaults unless the user asks otherwise — the tool
+   docstring explains each. Two arguments need a decision:
 
-   **Confirm before passing `post: true`.** Say in one line what will happen —
-   CloudAEye will post the control-flow card as a comment on pull request
-   #<n> — and run it only on a clear yes. Do not confirm on their behalf
-   because they named a PR in the argument: asking for a diagram of a pull
-   request is not asking to comment on it.
+   - `context`: pass `{"scope_path": "<path>"}` only when the user scoped the
+     run to a directory.
+   - `post`: **writes a comment where other people can see it.** Pass `true`
+     only after saying in one line what will happen — *CloudAEye will post the
+     control-flow card as a comment on pull request #<n>* — and getting a clear
+     yes. Naming a PR in the argument is asking for a diagram of it, not asking
+     to comment on it. Needs a session opened with a `pr_number`.
 
-   Call `mcp__plugin_cloudaeye_cloudaeye__control_flow`; it is pre-approved in
-   this skill's frontmatter.
-3. Print the `card` field verbatim, **every mermaid fence included**. Then stop.
+3. Print the `card` field **verbatim, every mermaid fence included**, then stop.
 
-   **The fence is mermaid and stays mermaid.** This is the same block that gets
-   posted on the pull request, so the diagram the developer reads here has to be
-   the diagram their reviewer sees there. If the client can render it, it will;
-   if it cannot, the source is still readable and still correct.
+   The fence is standard mermaid and stays mermaid: it is the same block that
+   gets posted on the pull request, so what the developer reads here must be
+   what their reviewer sees there. Do not redraw it as ASCII, flatten it for
+   the terminal, or summarise the arrows in prose. If asked to render it: it
+   renders in the artifact viewer, on GitHub, and in any markdown preview.
 
-   So: do not redraw it as ASCII art, do not "flatten it for the terminal", and
-   do not summarise the arrows in prose instead of printing them. If the user
-   asks to see it rendered, the answer is that the fence is standard mermaid —
-   it renders in the artifact viewer, on GitHub, and in any markdown preview.
+   The card is rendered server-side because what it may show is the feature.
+   Four things it carries are invisible once reformatted away:
 
-   The card is rendered server-side because the rules about what it may show
-   are the feature, and each one is invisible once it is gone:
-
-   - **every card opens with one line that begins "This code change …"** — print
-     it first and as written; it is the sentence a reviewer decides on;
+   - **it opens with one line beginning "This code change …"** — print it first
+     and as written; it is the sentence a reviewer decides on;
+   - **a facts table** — why this flow, what the call sequence did, how much of
+     the change is *not* in the diagram, and the cross-repository line. Its
+     "Independent changes" row is the one number nothing else carries;
    - a call the code graph could not follow is a **dashed arrow to a named
-     receiver**, and the legend says so — there is no list of them to print;
-   - the flows that were not drawn are **counted**;
-   - the footer says the diagram is structure rather than a trace.
+     receiver**, explained in the legend — there is no list of them to print;
+   - the footer says the diagram is structure, not a trace.
 
-   Reformatting the card, redrawing a diagram, "tidying" the participants or
-   summarising the footer drops all three. Do not do any of them.
+   **Two diagrams, under `### Before` and `### After`, whenever the call
+   sequence moved** — additions included. Both declare the same participants
+   in the same order, so one collaborator can be tracked straight down the
+   page. Print both, headings included: dropping Before turns a comparison into
+   a claim about the current code. They are **two states, not one sequence** —
+   never read Before's arrows as part of After's flow, never number across
+   them. A Before heading reading *"this symbol did not exist"* means the
+   change created it; the empty picture is the finding, not a rendering fault.
 
-   **The card holds two diagrams whenever the call sequence moved**, under
-   `### Before` and `### After` headings — additions included. Both pictures
-   declare the same participants in the same order, so the lifelines line up
-   vertically down the page and one collaborator can be tracked through both.
-   When it does:
+   One diagram means one of two opposite things, and the opening line says
+   which: the sequence is **unchanged**, or there was **no pre-edit graph** to
+   compare against (`diff_measured: false`).
 
-   - print **both**, headings included. Dropping the Before block turns a
-     before/after into a claim about the current code;
-   - they are **two states, not one sequence**. Never describe the Before
-     block's arrows as part of the After block's flow, and never number across
-     the two;
-   - a Before heading reading **"this symbol did not exist"** means the change
-     created it. The empty picture is the finding, not a rendering fault.
-
-   One diagram means one of two things and they are opposite: the flow's call
-   sequence is **unchanged** (the card says so in a sentence), or there was no
-   pre-edit graph to compare against (`diff_measured: false`). `diagrams` says
-   how many you got.
-
-   **The card opens with a small facts table** — why this flow was chosen, what
-   the call sequence did, how much of the change is *not* in the diagram, and
-   the cross-repository line. It renders even when there is no picture worth
-   drawing, and it is the part a reviewer acts on when the diagram is thin. Its
-   "Independent changes" row is the one number nothing else carries: print it.
-
-   **The card may end with a `### Cross-repository reach` section**, when the
-   change deleted or re-signed something another connected repository calls, or
-   deleted or moved an endpoint one of them reaches over HTTP. It has its own
-   diagram and its own table. Two rules:
-
-   - **It is a claim about a different codebase.** Never fold its counts into
-     the flow's own — the facts table is about the repository being changed, and
-     the reach table is about others.
-   - **Lead with it when it is there.** A caller in another repository that this
-     change breaks is the most consequential thing on the card, and the reason
-     is that nothing else in a review would ever surface it.
+   **A `### Cross-repository reach` section**, when present, is a claim about a
+   *different* codebase — never fold its counts into the flow's own — and it is
+   the most consequential thing on the card: a caller in another repository
+   this change breaks is something nothing else in a review would surface.
+   Lead with it.
 
    These fields change what you may say around the card:
 
@@ -230,34 +196,26 @@ prompt for a key.
    |---|---|
    | `unavailable` | An ordinary answer, not an error to retry. Print the `note` and stop. |
    | `diagrams: 2` | The card holds a Before and an After. Print both; describe them as two states. |
-   | `diff_measured: false` | There was no pre-edit graph to compare against, so **every marker was suppressed** and there is no Before picture. Say the diagram shows the current flow and that what changed in it could not be determined. Never report it as "nothing changed". |
+   | `diff_measured: false` | No pre-edit graph, so **every marker was suppressed** and there is no Before. Say what changed could not be determined. Never report it as "nothing changed". |
    | `drawn: 0` | The change has no single flow. The card explains it. Do not pick a flow yourself. |
-   | `cross_repo.affected` | Callers in other repositories this change may break. Say how many and in how many repositories. |
-   | `cross_repo.unmeasured` | The cross-repository search **could not run**. This is not "no callers found" — say the search did not happen and why. |
-   | `cross_repo.not_indexed` | Some connected repositories have no indexed graph, so they could not be searched. Say how many. The one that breaks may be among them. |
-   | `pr_url` | The run was against a pull request. **End with a link to it** — `[<repo>#<pr_number>](<pr_url>)` — so the developer can open what was drawn. Absent on a working-tree run; give no link then, and never construct one yourself. |
-   | `posted.status` | `ok` means the card is on the pull request and you may point them there. `unavailable` or `failed` means it is **not** — say so and say why. Never write "posted on the PR" without reading this field. |
-   | `context_refresh.status` `skipped` or `failed` | The stored code graph was not refreshed with this diff, so the diagram may describe the pre-edit code. Say so in one line and quote `context_refresh.reason`. |
+   | `cross_repo.affected` | Callers in other repositories this change may break. Say how many, in how many repositories. |
+   | `cross_repo.unmeasured` | The search **could not run**. Not "no callers found" — say it did not happen and why. |
+   | `cross_repo.not_indexed` | Some connected repositories have no graph and could not be searched. Say how many; the one that breaks may be among them. |
+   | `pr_url` | A pull-request run. **End with a link** — `[<repo>#<pr_number>](<pr_url>)`. Absent on a working-tree run: give no link, and never construct one. |
+   | `posted.status` | `ok` means the card is on the pull request. `unavailable` or `failed` means it is **not** — say so and why. Never write "posted" without reading this. |
+   | `context_refresh.status` `skipped`/`failed` | The graph was not refreshed with this diff; the diagram may describe pre-edit code. Say so in one line and quote `context_refresh.reason`. |
 
 ## Notes
 
-- This is a **single-shot** skill — one call, print the card, done. No loop, no
-  fix-and-retry.
-- Good moments to invoke: before opening a PR, when a reviewer asks "what does
-  this actually change about the flow?", when a change touches several
-  components and the ordering matters.
-- **Line order is not execution order.** `alt` blocks show branches; early
-  returns and exceptions are not modelled. Do not narrate the diagram as what
-  the code does at runtime — it is what the code is *shaped like*.
+- **Single-shot**: one call, print the card, done. No loop, no fix-and-retry.
+- Good moments: before opening a PR; when a reviewer asks "what does this
+  actually change about the flow?"; when a change touches several components
+  and the ordering matters.
+- **Line order is not execution order.** `alt` shows branches; early returns and
+  exceptions are not modelled. The diagram is what the code is *shaped like*.
 - **The arrows are not yours to add.** Every message was resolved from the
-  symbol index. If you think one is missing, say so as an observation; do not
-  edit it into the mermaid.
-- Two origins, one tool: a working-tree diff or a pull request the server
-  fetched. The diagram is identical either way; a pull-request run additionally
-  carries `pr_url` to link, and `post` needs that origin.
-- Without a refreshed code graph there are no resolved calls at all, and the
-  tool returns `unavailable: no_code_graph` rather than a guess.
-- If `control_flow` is unavailable (MCP not connected), warn the user and skip —
-  **do not draw a sequence diagram yourself from `git diff`**. A hand-drawn one
-  is exactly the guesswork this tool exists to replace, and nothing in it would
-  tell the reader which arrows were verified.
+  symbol index. A missing one is an observation to state, not an edit to make.
+- If `control_flow` is unavailable (MCP not connected), warn and skip — **do not
+  draw a sequence diagram yourself from `git diff`**. A hand-drawn one is the
+  guesswork this tool exists to replace, and nothing in it would say which
+  arrows were verified.
