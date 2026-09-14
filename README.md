@@ -7,7 +7,7 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 | Command | Purpose |
 |---|---|
 | `/cloudaeye:init` | Detect and initialize the current repository |
-| `/cloudaeye:inspect` | Bug-focused review without security prompts |
+| `/cloudaeye:inspect` | Bug-focused review; security is a separate pass |
 | `/cloudaeye:security` | Application, LLM, agent, MCP, and secret security review |
 | `/cloudaeye:review` | Full bug and security review |
 | `/cloudaeye:describe` | Describe the pending change |
@@ -33,7 +33,7 @@ Every review command runs in one of two modes: with no argument it reviews your 
 ### Before you commit
 
 ```text
-/cloudaeye:inspect                  after each task — the cheap bug pass, no security prompts
+/cloudaeye:inspect                  after each task — the cheap bug pass; security is its own pass
 /cloudaeye:implement [1,3]          plan fixes for findings 1 and 3; Claude applies them
 /cloudaeye:inspect                  again, to confirm the fixes landed
 /cloudaeye:check-task BETA-5225     does the change do what the ticket asked?
