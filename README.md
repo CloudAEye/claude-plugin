@@ -44,6 +44,24 @@ Restart Claude Code so the MCP server connects. If you previously installed the 
 
 Claude Code stores and refreshes the OAuth credentials.
 
+## Update
+
+Every release bumps the `version` in [plugin.json](.claude-plugin/plugin.json); Claude Code only offers an update when it sees a newer one.
+
+**Nothing prompts you by default.** Claude Code turns auto-update off for every marketplace that is not Anthropic's own, so a new CloudAEye release waits until you ask for it:
+
+```text
+claude plugin update cloudaeye@cloudaeye
+```
+
+Then run `/reload-plugins` in a terminal session, or start a new session. In the desktop app the plugin's MCP server — where the review tools live — reconnects only in a new session, so start one there; a release usually changes what that server offers, and a stale connection keeps the old tool list.
+
+**To be prompted instead**, turn auto-update on for the CloudAEye marketplace once: `/plugin` → **Marketplaces** → `cloudaeye` → **Enable auto-update**. Claude Code then checks after each session starts, with a random delay of up to ten minutes, and when it has fetched a newer version shows a notification asking you to run `/reload-plugins`. If you ignore it, the new version loads on your next launch. The desktop app has no `/plugin` panel; use the command above there.
+
+**Updating does not sign you out.** Credentials are stored against the server URL, and an update never changes it. If `/mcp` shows **Needs authentication** after an update, a token could not be refreshed — run **Authenticate** as above. Nothing about the update itself requires it.
+
+`claude plugin list` shows the version you have.
+
 ## Self-hosted Server
 
 The plugin uses `https://api.cloudaeye.com/mcp` by default. Set `CLOUDAEYE_URL` before starting Claude Code to use a self-hosted OAuth-enabled MCP endpoint.
@@ -68,6 +86,7 @@ OAuth requires an interactive MCP client, so unattended CI and service-account s
 |---|---|
 | CloudAEye shows **Needs authentication** | Open `/mcp` and complete **Authenticate** |
 | A skill says `start_session` is unavailable | Restart Claude Code so the updated MCP tools load |
+| A command from the docs is missing, or its tool is reported unavailable | Your plugin is behind: `claude plugin update cloudaeye@cloudaeye`, then a new session — see [Update](#update) |
 | `upload_http=401` | The upload grant is missing, invalid, or belongs to another session |
 | `upload_http=000` | Check network access and the configured review server URL |
 | `cloudaeye_error=insecure_url` | Use HTTPS, except for localhost development |
