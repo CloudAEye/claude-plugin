@@ -12,6 +12,7 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 | `/cloudaeye:review` | Full bug and security review |
 | `/cloudaeye:describe` | Describe the pending change |
 | `/cloudaeye:control-flow` | Draw what the change did to the flow of control, as a sequence diagram |
+| `/cloudaeye:review-arch` | Review what the change did to the architecture: layers, components, crossed boundaries, and the questions a senior engineer would ask |
 | `/cloudaeye:ask` | Ask a question about the pending change |
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
 | `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
@@ -24,7 +25,7 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
 
-Four commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, `/cloudaeye:control-flow` can post its card there when asked, and `/cloudaeye:create-issue` opens real tickets.
+Five commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, `/cloudaeye:control-flow` and `/cloudaeye:review-arch` can post their cards there when asked, and `/cloudaeye:create-issue` opens real tickets.
 
 ## Typical workflows
 
@@ -41,13 +42,14 @@ Every review command runs in one of two modes: with no argument it reviews your 
 /cloudaeye:describe                 the PR body
 ```
 
-`/cloudaeye:control-flow` shows what the change did to the order of calls, and `/cloudaeye:slop-score` how much careful reading it needs — both useful before a PR on a change you did not write line by line.
+`/cloudaeye:control-flow` shows what the change did to the order of calls, `/cloudaeye:review-arch` what it did to the layers and the boundaries between them, and `/cloudaeye:slop-score` how much careful reading it needs — all useful before a PR on a change you did not write line by line.
 
 ### After you push
 
 ```text
 /cloudaeye:review #412              the full review, on the pull request
 /cloudaeye:control-flow #412        before/after diagrams, and who in other repositories calls what changed
+/cloudaeye:review-arch #412         how the change is layered, what it crossed, and what to ask before merging
 /cloudaeye:check-pr #412            the hygiene checklist — description, title, docs, tests, dependencies
 /cloudaeye:add-docs #412            docstrings, posted as suggestions on the pull request
 /cloudaeye:add-tests #412           unit tests, posted the same way
