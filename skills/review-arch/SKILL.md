@@ -1,6 +1,6 @@
 ---
 name: review-arch
-description: Review what the uncommitted changes in this repo (or a pull request) did to the repository's architecture — which layers and components the change touches, every dependency it added with the ones that cross layers marked, layer violations, new cycles, first-in-layer boundary calls, undeclared dependencies, and the questions a senior engineer would ask of this change. The layers come from the repository's Architecture Model and the edges from its code graph; nothing is inferred from the diff text. Reports; it never edits code and finds no bugs.
+description: Review what the uncommitted changes in this repo (or a pull request) did to the architecture, in three pictures, widest first — the tenant's services as their deployment files wire them, the repository's layers and components with the services that call it, and what the change did to the layers — then the findings (layer violations, new cycles, first-in-layer boundary calls, undeclared dependencies, a break another repository would feel) and the questions a senior engineer would ask of this change. The layers come from the repository's Architecture Model and the edges from its code graph; nothing is inferred from the diff text. Reports; it never edits code and finds no bugs.
 when_to_use: Use before opening or merging a pull request that adds a dependency, a new module, a new external system or crosses a layer, when a reviewer asks "does this fit the architecture", or when the user asks for an architecture review, a layer check, or "what does this change touch". For bugs use /cloudaeye:inspect; for the call sequence use /cloudaeye:control-flow.
 allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__initialize_repository", "mcp__cloudaeye__initialize_repository", "mcp__plugin_cloudaeye_cloudaeye__start_session", "mcp__cloudaeye__start_session", "mcp__plugin_cloudaeye_cloudaeye__review_arch", "mcp__cloudaeye__review_arch"]
 ---
@@ -149,21 +149,45 @@ prompt for a key.
      only after saying in one line what will happen — *CloudAEye will post the
      architecture review as a comment on pull request #<n>* — and getting a
      clear yes. Naming a PR in the argument is asking for a review of it, not
-     asking to comment on it. Needs a session opened with a `pr_number`.
+     asking to comment on it. Needs a session opened with a `pr_number`. The
+     comment is the same review drawn for GitHub — the pictures with brand
+     icons and a legend under each, the findings and questions as tables, the
+     repository section collapsed, and this card itself in a collapsed section
+     at the end — so there is nothing to describe in chat beyond whether it
+     landed.
 
-3. Print the `card` field **verbatim, the mermaid fence included when there is
-   one**, then stop.
+3. Print the `card` field **verbatim, every mermaid fence included**, then
+   stop.
 
    The card is rendered server-side because what it may show is the feature.
-   It reads top to bottom as: the verdict line; how the change is layered — a
-   text diagram with one row per changed module under its layer and
-   component, and one line per dependency the change added (`+`), removed
-   (`-`) or added against the layer order (`!`), with `[kind]` marking a new
-   call to a database, cache, queue, HTTP service or model provider; a mermaid
-   block of the same picture, only when a dependency crossed a layer; the
-   numbered findings; the questions under *Worth a senior look*; and a footer.
-   Do not redraw the diagram, renumber the findings, or fold the footer into
-   prose. Three things on it are invisible once reformatted away:
+   It reads top to bottom as:
+
+   - the verdict line, with the layers the change touched;
+   - **The system** — the tenant's services, read from the files each
+     repository deploys with (its ingress path, the URLs its build calls,
+     compose, Helm, a .NET Aspire host), one line each and a picture: the
+     clients, the gateway, the services in rows, where state lives and what
+     is called outside, and a `coverage:` line saying which repositories were
+     not read and why;
+   - **The repository** — its layers stacked as a ladder, the systems it
+     calls, and the tenant's services that call it, then a table of the
+     layers and one of the features that cut across them;
+   - **What the change did to the layers** — one row per changed module
+     under its layer and component, and one line per dependency the change
+     added (`+`), removed (`-`) or added against the layer order (`!`), with
+     `[kind]` marking a new call to a database, cache, queue, HTTP service or
+     model provider; and a picture of the same — the layers as stacked blocks,
+     each call labelled on its arrow — drawn only when a dependency crossed a
+     layer;
+   - the numbered findings;
+   - **Across the tenant** — which other repositories call this service, and
+     who a change here would break;
+   - the questions under *Worth a senior look*, and a footer.
+
+   The system and repository pictures show the code **before** the change;
+   only the last picture is the change. Do not redraw a diagram, renumber the
+   findings, or fold the footer into prose. Three things on it are invisible
+   once reformatted away:
 
    - **the footer's `Pre-existing violations in touched files: N`** — the
      review grades the *change*, and a clean card over a large N is a clean
@@ -182,12 +206,17 @@ prompt for a key.
    | field | what to do with it |
    |---|---|
    | `unavailable` | An ordinary answer, not an error to retry. Print the `note` and stop. `no_model` with a `reason` means the model could neither be loaded nor built. |
+   | `unavailable: no_changed_files` | None of the change is code the review reads. The `note` names what it touched — `touched` counts manifests, deployment files, CI and docs. `unread_languages` is code in a language the review does not read yet: say that is a gap in what was reviewed, never that there was nothing to review. |
    | `verdict` | `PASS`, `FINDINGS` or `FAIL`. Say it as the first word. `FAIL` only ever comes from a rule the repository declared. |
    | `diff_measured: false` | No pre-edit graph, so **no edge is marked added** and cycles and direction were not compared. Say what changed could not be determined. Never report it as "nothing changed". |
    | `pre_existing` | Violations already in the touched files, counted and never listed. Mention the number when it is not zero. |
    | `explain_failed` | The walk-through and the answers were not written; the questions are printed as questions. Say the review is measured only. |
    | `confirm_failed` | Pattern candidates could not be judged and were dropped. Not a clean pattern check. |
    | `model.source` / `model.labelled` | `built` or `labelled: false`: name components by their directory and say the model was built on the fly. |
+   | `model.labelling` | `started` or `in_progress`: the components are being named in the background. This card names them by directory; the next run will not. Say so once. |
+   | `system_map` | `measured: false` with a `reason`: the system picture was not drawn. `not_read` counts repositories whose deployment files could not be read — the card's `coverage:` line says why for each. Describe the tenant only as far as the picture goes. |
+   | `service_map` | Which of the tenant's other repositories call this one, found in their code. `measured: false` means callers were not searched; otherwise "no caller" is only as wide as `searched`. |
+   | `cross_repo` | `breaks` / `consumers`: something this change deleted or re-signed is used in another repository, and each consumer is a numbered finding. `measured: false` means that was not checked — not that nothing breaks. |
    | `pr_url` | A pull-request run. **End with a link** — `[<repo>#<pr_number>](<pr_url>)`. Absent on a working-tree run: give no link, and never construct one. |
    | `posted.status` | `ok` means the card is on the pull request. `unavailable` or `failed` means it is **not** — say so and why. Never write "posted" without reading this. |
    | `context_refresh.status` `skipped`/`failed` | The graph was not refreshed with this diff; the review may describe pre-edit code. Say so in one line and quote `context_refresh.reason`. |

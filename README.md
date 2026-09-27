@@ -12,7 +12,7 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 | `/cloudaeye:review` | Full bug and security review |
 | `/cloudaeye:describe` | Describe the pending change |
 | `/cloudaeye:control-flow` | Draw what the change did to the flow of control, as a sequence diagram |
-| `/cloudaeye:review-arch` | Review what the change did to the architecture: layers, components, crossed boundaries, and the questions a senior engineer would ask |
+| `/cloudaeye:review-arch` | Review what the change did to the architecture, in three pictures — the system, the repository's layers, and the change — with the findings and the questions a senior engineer would ask |
 | `/cloudaeye:ask` | Ask a question about the pending change |
 | `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
 | `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
@@ -49,7 +49,7 @@ Every review command runs in one of two modes: with no argument it reviews your 
 ```text
 /cloudaeye:review #412              the full review, on the pull request
 /cloudaeye:control-flow #412        before/after diagrams, and who in other repositories calls what changed
-/cloudaeye:review-arch #412         how the change is layered, what it crossed, and what to ask before merging
+/cloudaeye:review-arch #412         the system, the repository's layers, what the change crossed, and what to ask before merging
 /cloudaeye:check-pr #412            the hygiene checklist — description, title, docs, tests, dependencies
 /cloudaeye:add-docs #412            docstrings, posted as suggestions on the pull request
 /cloudaeye:add-tests #412           unit tests, posted the same way
