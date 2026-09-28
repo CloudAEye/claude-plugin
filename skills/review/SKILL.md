@@ -2,7 +2,7 @@
 name: review
 description: Full CloudAEye review — bugs and security in one pass — of the uncommitted changes in this repo, of just one file or directory of them, or of an open pull request given its number. Reports findings with file, line and severity, grouped by kind; it never edits code on its own. The widest and most expensive of the CloudAEye passes.
 when_to_use: Use before opening a significant PR, when the user asks for a full, complete or thorough review, when they name a path to review ("/cloudaeye:review src/auth/"), or when they name a pull request ("/cloudaeye:review #405", "review PR 12"). For the routine check after finishing a task use /cloudaeye:inspect; for the security surface alone use /cloudaeye:security.
-argument-hint: "[optional: a path like src/auth/, or a PR number like #405]"
+argument-hint: "[optional: a path, a PR number like #405, and/or --critical]"
 allowed-tools: ["mcp__plugin_cloudaeye_cloudaeye__initialize_repository", "mcp__cloudaeye__initialize_repository","mcp__plugin_cloudaeye_cloudaeye__start_session", "mcp__cloudaeye__start_session", "mcp__plugin_cloudaeye_cloudaeye__inspect_diff", "mcp__cloudaeye__inspect_diff"]
 ---
 
@@ -21,6 +21,7 @@ The argument decides which. Read it before anything else:
 | *none* | **Working tree** — every uncommitted change, as every CloudAEye skill does. |
 | `#405`, or bare digits like `405` | **Pull request** — PR 405 of this repository. |
 | anything else — `src/auth/login.ts`, `src/auth/`, `src/auth` | **Path** — only the changes under that file or directory. |
+| `--critical` `--high` `--medium` `--low` | Combine with any mode above — reports that level **and higher**. |
 
 Digits mean a pull request. If the user really means a directory named `405`, they write `./405` and you treat it as a path.
 
@@ -33,6 +34,34 @@ The scope is applied where the diff is made — `git diff <base> -- <path>` — 
 **A scoped review is blind outside the scope by construction.** The cross-file checks — the compiler pass that catches callers broken by a changed signature — can only see files in the diff, so a break in a file the path excluded will not be found. Worth one line to the user when the excluded count is not zero.
 
 If the path matches nothing in the diff, say so naming the path and stop. Do not silently widen to the whole change.
+
+### Severity flag
+
+Any mode also takes a floor: `--critical`, `--high`, `--medium`, `--low`.
+
+```
+/cloudaeye:review --critical
+/cloudaeye:review src/auth/ --high
+/cloudaeye:review #405 --critical
+```
+
+**It is a floor, not an exact match.** `--high` reports high *and* critical.
+Showing a high finding while a critical sat hidden beneath the filter would be
+the worst possible reading of the word.
+
+The floor rides into the scan prompt as well as the final filter, so a filtered
+review genuinely **costs less** rather than merely showing less — the scan stops
+producing candidates the later stages would otherwise pay to verify and format.
+
+Pass it as `min_severity` on the tool call, with the leading dashes stripped.
+An unrecognised value is refused by the server; report the error rather than
+retrying without the flag, because reviewing everything when the user asked for
+critical only is a failure they cannot see.
+
+When a floor was applied the response carries `min_severity`, and `held_back`
+counts what sat below it. **Report both.** "No findings" and "no findings at or
+above critical, and four below it" are different answers, and only one of them
+is true.
 
 ### Pull-request mode
 
@@ -112,7 +141,7 @@ Do not start a session until this gate reports `ready` or `initialized`.
 
    On success the response carries a `pull_request` block: number, title, `draft`, `base`, `head`, `head_sha` and `changed_files`. Say which pull request you are reviewing, and say so if it is a draft — the user may have meant a different one, and the head SHA is what makes the review reproducible.
 
-   **Working-tree mode only, from here to the end of step 1.** Validate the returned values before substituting them below: `session_id` must contain only hex digits and dashes, `upload_token` exactly 64 hex characters, `upload_url` must be HTTPS or localhost HTTP, and `target_branch` must match `[A-Za-z0-9._/-]+` without starting with `-`; use an empty target when it does not. Then run this as one Bash call. The upload token is written only to a private temporary curl config and is never printed or stored in the repository.
+   **Working-tree and path modes only, from here to the end of step 1.** Validate the returned values before substituting them below: `session_id` must contain only hex digits and dashes, `upload_token` exactly 64 hex characters, `upload_url` must be HTTPS or localhost HTTP, and `target_branch` must match `[A-Za-z0-9._/-]+` without starting with `-`; use an empty target when it does not. Then run this as one Bash call. The upload token is written only to a private temporary curl config and is never printed or stored in the repository.
 
    ```bash
    CE_SESSION='<session_id>'
@@ -181,6 +210,7 @@ Do not start a session until this gate reports `ready` or `initialized`.
    - `session_id`: the `session_id` printed by step 1
    - `intent`: the summary from step 2
    - `profile`: `"review"` — **always this value from this skill.** It selects every valid prompt: the bug categories and the full security surface.
+   - `min_severity`: when the user passed a severity flag, its name with the dashes stripped — `critical`, `high`, `medium` or `low`. Omit it entirely otherwise; do not default to a floor the user did not ask for.
    - `context`: in **path mode**, set `scope_path` to the path the user gave. It filters nothing — you already narrowed the diff — but it is what makes the response say what it covered, and a narrowed `approve` that does not say so is the one result that misleads. Otherwise only `pr_title` / `pr_description`. Do not pass `review_config` or `report_types`; either one overrides the profile and narrows the review you were asked to run.
 
    Call `mcp__plugin_cloudaeye_cloudaeye__inspect_diff`; it is pre-approved in this skill's frontmatter.

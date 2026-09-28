@@ -9,7 +9,7 @@
     {
       "name": "cloudaeye",
       "source": "./",
-      "description": "Pre-commit code review, security scan, task verification, and fix planning.",
+      "description": "Pre-commit code review, security scan, AI-slop scoring, task verification, PR hygiene checks, docstring and unit-test generation, issue explanation, tracking-issue creation, and fix planning.",
       "category": "development",
       "tags": ["code-review", "security", "pre-commit"]
     }
