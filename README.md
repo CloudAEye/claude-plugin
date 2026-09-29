@@ -6,26 +6,38 @@ Pre-commit code review, security scanning, AI-slop scoring, change descriptions,
 
 | Command | Purpose |
 |---|---|
-| `/cloudaeye:init` | Detect and initialize the current repository |
-| `/cloudaeye:inspect` | Bug-focused review; security is a separate pass |
-| `/cloudaeye:security` | Application, LLM, agent, MCP, and secret security review |
-| `/cloudaeye:review` | Full bug and security review |
-| `/cloudaeye:describe` | Describe the pending change |
-| `/cloudaeye:control-flow` | Draw what the change did to the flow of control, as a sequence diagram |
-| `/cloudaeye:review-arch` | Review what the change did to the architecture, in three pictures — the system, the repository's layers, and the change — with the findings and the questions a senior engineer would ask |
-| `/cloudaeye:ask` | Ask a question about the pending change |
-| `/cloudaeye:check-task` | Compare the pending change with a task or ticket |
-| `/cloudaeye:check-pr` | Run the hygiene checklist over an open pull request |
-| `/cloudaeye:implement` | Plan a fix for findings a review already produced |
-| `/cloudaeye:slop-score` | Score a change for AI-slop signals, with the evidence behind every point |
-| `/cloudaeye:add-docs` | Write docstrings for an open pull request and post them there as suggestions |
-| `/cloudaeye:add-tests` | Write unit tests for an open pull request and post them there as suggestions |
-| `/cloudaeye:explain` | Explain a Jira or GitHub issue against the code it touches |
-| `/cloudaeye:create-issue` | File findings from a review as Jira tickets or GitHub issues |
+| `/cloudaeye:help` | List all available commands, or show how to use a specific command with its arguments, options, and examples. |
+| `/cloudaeye:init` | Set up the current repository for CloudAEye review. Detects its provider, remote URL, and base branch, prompts for a monitor branch, and opens integration setup when needed. |
+| `/cloudaeye:inspect` | Find bugs such as logic errors, missed edge cases, invalid inputs, concurrency problems, and broken code signatures. Returns an approval verdict and numbered findings with file locations and severity. |
+| `/cloudaeye:security` | Find security issues across application code, LLMs, AI agents, and MCP tools, including secrets leaked in changed lines. Use for changes involving authentication, untrusted input, cryptography, prompts, or tool definitions. |
+| `/cloudaeye:review` | Run all six report types in one comprehensive bug and security review. Use before opening a significant PR or when a large change needs more than the routine bug check. |
+| `/cloudaeye:describe` | Turn the pending change into a Markdown description and a list of important changes for a PR body or commit message. Uses repository context to explain the impact across files. |
+| `/cloudaeye:control-flow` | Draw sequence diagrams showing calls the change added, removed, redirected, or moved. Identifies affected callers in other connected repositories so you can see how the change alters execution flow. |
+| `/cloudaeye:review-arch` | Show how a change affects the system architecture, repository layers, and dependencies through three diagrams. Reports architecture findings, cross-repository impact, and questions for a senior review. |
+| `/cloudaeye:ask` | Answer questions about the pending change. Ask what else calls a function, how it behaved before, or where a similar pattern is used. |
+| `/cloudaeye:check-task` | Verify whether the pending change fulfills a Jira ticket, GitHub issue, or written specification. Returns a DONE, PARTIAL, or NOT DONE verdict with details of missing work. |
+| `/cloudaeye:check-pr` | Check an open PR's docstring and test coverage, README freshness, dependencies, title and description, duplicate code, and secrets. Runs the repository's configured checklist and posts the detailed report on the PR. |
+| `/cloudaeye:implement` | Turn selected review findings into a fix plan. Identifies what to change, where to change it, and the affected callers, related defects, and tests. |
+| `/cloudaeye:slop-score` | Assess how much manual review a change needs by checking nine code quality signals, including duplication, nonexistent APIs, dead code, missing tests, and overengineering. Returns a review band with supporting evidence. |
+| `/cloudaeye:add-docs` | Generate docstrings for undocumented code in an open pull request and post them as review suggestions. Reports which suggestions were generated and which reached the PR. |
+| `/cloudaeye:add-tests` | Generate unit tests for uncovered code in an open pull request, including new test files where needed. Posts the tests as review suggestions for you to review and run. |
+| `/cloudaeye:explain` | Explain a Jira or GitHub issue using the code it touches. Describes the relevant components, their current behavior, and surrounding code so you can understand the work before implementing it. |
+| `/cloudaeye:create-issue` | Turn selected findings from the last review into Jira tickets or GitHub issues, with an optional assignee and note. Returns ticket links and identifies findings already tracked in the same session. |
 
 The review commands report results and do not edit code. `/cloudaeye:implement` is the one that leads to edits, and even there the server only returns a plan — Claude applies it, and you re-run the review to confirm the fix landed.
 
-Five commands write where other people can see it, and each confirms before it does: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, `/cloudaeye:control-flow` and `/cloudaeye:review-arch` can post their cards there when asked, and `/cloudaeye:create-issue` opens real tickets.
+Five commands require confirmation before their external writes: `/cloudaeye:add-docs` and `/cloudaeye:add-tests` post suggestions on a pull request, `/cloudaeye:control-flow` and `/cloudaeye:review-arch` can post their cards there when asked, and `/cloudaeye:create-issue` opens real tickets. Separately, `/cloudaeye:check-pr` posts its detailed report to the PR, and `/cloudaeye:explain` can also leave a comment on the issue.
+
+## Command help
+
+Run `/cloudaeye:help` to print the complete command table above, or
+`/cloudaeye:help inspect` for a manual covering syntax, all supported arguments
+and options, defaults, examples, output, and limitations. Full names such as
+`/cloudaeye:help /cloudaeye:inspect` work too. Unknown names return the catalog
+without running anything.
+
+Help reads this README and the installed command's skill locally. It requires
+no Git repository, authentication, network access, or running MCP server.
 
 ## Typical workflows
 
@@ -131,5 +143,10 @@ OAuth requires an interactive MCP client, so unattended CI and service-account s
 ```text
 .claude-plugin/plugin.json   plugin manifest
 .mcp.json                    OAuth MCP server registration
-skills/<verb>/SKILL.md       operational commands
+skills/<verb>/SKILL.md       commands, including local help
 ```
+
+When adding a command, update the Commands table above and its skill's inputs
+and behavior: help reads these as its reference. Also update the documentation
+repository's `docs/user-guide/mcp/skills.md`, `usage-guide.md`, and
+`docs/user-guide/code-review/self-hosting/mcp.md` so every command is discoverable.
